@@ -1,419 +1,1296 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  AlertTriangle,
-  Bookmark,
-  BookmarkCheck,
-  Bot,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  CreditCard,
-  ExternalLink,
-  Home,
-  Lock,
-  LogOut,
-  Moon,
-  Plus,
-  RefreshCw,
-  Search,
-  Sparkles,
-  Sun,
-  Trash2,
-  Upload,
-  X,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
-export type ThemeMode = 'dark' | 'light';
-export type DashboardTab = 'vagas' | 'usuario' | 'curriculo' | 'configuracoes';
-export type WorkModality = 'todas' | 'remoto' | 'hibrido' | 'presencial';
-export type SeniorityLevel = 'todos' | 'estagio' | 'junior' | 'pleno' | 'senior';
+/* ============================================================================
+   1. INTERFACES E TIPOS (CONSOLIDADOS)
+   ============================================================================ */
+
+export type DashboardTab = 'vagas' | 'perfil' | 'curriculo' | 'configuracoes';
+
+export type WorkModality = 'todos' | 'remoto' | 'presencial' | 'hibrido';
+
+export type UserSex = 'masculino' | 'feminino' | 'outro' | 'prefiro_nao_informar' | '';
+
 export type LanguageProficiency =
   | 'basico'
   | 'intermediario'
   | 'avancado'
-  | 'fluente_nativo';
-export type ApplicationStatus =
-  | 'Enviada'
-  | 'Pendente'
-  | 'Em análise'
-  | 'Entrevista'
-  | 'Recusada';
-
-export interface JobFilters {
-  keywords: string;
-  modality: WorkModality;
-  seniority: SeniorityLevel;
-  location: string;
-  onlySaved: boolean;
-}
-
-export interface RecommendedJob {
-  id: string;
-  title: string;
-  company: string;
-  modality: Exclude<WorkModality, 'todas'>;
-  location?: string;
-  foundAt: string;
-  isNew?: boolean;
-  matchPercentage: number;
-  compatibilitySummary: string;
-  requirements: string[];
-  externalUrl: string;
-  isSaved: boolean;
-}
-
-export interface JobApplication {
-  id: string;
-  company: string;
-  roleTitle?: string;
-  appliedAt: string;
-  status: ApplicationStatus;
-}
-
-export interface DailyQuota {
-  usedToday: number;
-  dailyLimit: number;
-}
-
-export interface QuotaPackage {
-  id: 'pack_50' | 'pack_75' | 'pack_100';
-  extraJobs: number;
-  priceBRL: number;
-  formattedPrice: string;
-  label: string;
-}
+  | 'fluente'
+  | 'nativo';
 
 export interface UserProfile {
-  firstName: string;
-  lastName: string;
-  age: number | '';
-  gender: 'masculino' | 'feminino' | 'outro' | 'prefiro_nao_informar' | '';
+  id: string;
+  nome: string;
+  sobrenome: string;
+  idade: number | '';
+  sexo: UserSex;
   email: string;
 }
 
-export interface ResumeLanguage {
+export interface ExperienceItem {
   id: string;
-  language: string;
-  level: LanguageProficiency;
+  cargo: string;
+  empresa: string;
+  periodo: string;
+  descricao: string;
 }
 
-export interface ResumeData {
-  fileName: string | null;
-  fileUrl?: string | null;
-  about: string;
-  experiences: string;
-  personalProjects: string;
-  skills: string;
-  languages: ResumeLanguage[];
-  education: string;
+export interface PersonalProjectItem {
+  id: string;
+  nome: string;
+  tecnologias: string;
+  link: string;
+  descricao: string;
 }
 
-export interface DashboardServices {
-  onSearchJobs?: (filters: JobFilters) => Promise<RecommendedJob[]>;
-  onToggleSaveJob?: (jobId: string, nextSavedState: boolean) => Promise<void>;
-  onPurchaseQuotaPackage?: (pkg: QuotaPackage) => Promise<{ newDailyLimit: number }>;
-  onUpdateProfile?: (profile: Omit<UserProfile, 'email'>) => Promise<void>;
-  onUploadResumeFile?: (file: File) => Promise<{ fileName: string; fileUrl?: string }>;
-  onExtractResumeWithAI?: (file?: File) => Promise<Omit<ResumeData, 'fileName' | 'fileUrl'>>;
-  onSaveResumeData?: (data: ResumeData) => Promise<void>;
-  onChangeEmail?: (newEmail: string, currentPassword: string) => Promise<void>;
-  onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
-  onDeleteAccount?: (confirmationText: string) => Promise<void>;
-  onLogout?: () => Promise<void>;
+export interface LanguageItem {
+  id: string;
+  idioma: string;
+  nivel: LanguageProficiency;
 }
 
-export interface DashboardPageProps {
-  initialProfile?: UserProfile;
-  initialResume?: ResumeData;
-  initialJobs?: RecommendedJob[];
-  initialApplications?: JobApplication[];
-  initialQuota?: DailyQuota;
-  services?: DashboardServices;
+export interface EducationItem {
+  id: string;
+  tipo: 'faculdade' | 'curso' | 'certificado';
+  titulo: string;
+  instituicao: string;
+  periodo: string;
 }
 
-const QUOTA_PACKAGES: QuotaPackage[] = [
-  {
-    id: 'pack_50',
-    extraJobs: 50,
-    priceBRL: 19.99,
-    formattedPrice: 'R$ 19,99',
-    label: '+50 vagas por dia',
-  },
-  {
-    id: 'pack_75',
-    extraJobs: 75,
-    priceBRL: 39.9,
-    formattedPrice: 'R$ 39,90',
-    label: '+75 vagas por dia',
-  },
-  {
-    id: 'pack_100',
-    extraJobs: 100,
-    priceBRL: 49.9,
-    formattedPrice: 'R$ 49,90',
-    label: '+100 vagas por dia',
-  },
-];
+export interface UserResume {
+  arquivoNome?: string;
+  arquivoUrl?: string;
+  sobre: string;
+  experiencias: ExperienceItem[];
+  projetosPessoais: PersonalProjectItem[];
+  habilidades: string[];
+  idiomas: LanguageItem[];
+  formacoes: EducationItem[];
+}
 
-const EMPTY_PROFILE: UserProfile = {
-  firstName: '',
-  lastName: '',
-  age: '',
-  gender: '',
-  email: '',
-};
+export interface JobListing {
+  id: string;
+  titulo: string;
+  empresa: string;
+  modalidade: Exclude<WorkModality, 'todos'>;
+  localizacao: string;
+  tipoContrato?: string;
+  salario?: string;
+  aderenciaPercentual: number;
+  urlVaga: string;
+  salva: boolean;
+  candidatada: boolean;
+  dataCandidatura?: string;
+  resumo?: string;
+}
 
-const EMPTY_RESUME: ResumeData = {
-  fileName: null,
-  fileUrl: null,
-  about: '',
-  experiences: '',
-  personalProjects: '',
-  skills: '',
-  languages: [],
-  education: '',
-};
+export interface JobFilterParams {
+  palavraChave: string;
+  modalidade: WorkModality;
+  localizacao: string;
+  tipoContrato: string;
+  aderenciaMinima: number;
+}
 
-const ACCEPTED_MIME_TYPES = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-];
+export interface DailyQuotaStatus {
+  limiteBaseDiario: number; // 50 vagas/dia
+  bonusAdquirido: number;
+  consumidasHoje: number;
+  restantesHoje: number;
+  resetEm: string;
+}
 
-export function DashboardPage({
-  initialProfile = EMPTY_PROFILE,
-  initialResume = EMPTY_RESUME,
-  initialJobs = [],
-  initialApplications = [],
-  initialQuota = { usedToday: 0, dailyLimit: 50 },
-  services,
-}: DashboardPageProps) {
-  const navigate = useNavigate();
+export interface QuotaPlan {
+  id: 'plan_50' | 'plan_75' | 'plan_100';
+  nome: string;
+  vagasExtras: number;
+  precoReais: number;
+  precoFormatado: string;
+  descricao: string;
+}
 
-  // Tema Claro / Escuro (padrão escuro conforme Anexo 2)
-  const [theme, setTheme] = useState<ThemeMode>('dark');
-  const isDark = theme === 'dark';
+export interface UserDashboardPageProps {
+  onRedirectLogin?: () => void;
+}
 
-  // Navegação por abas
-  const [activeTab, setActiveTab] = useState<DashboardTab>('vagas');
+/* ============================================================================
+   2. CSS EMBUTIDO (IDENTIDADE VISUAL DARK / BEGE DA REFERÊNCIA)
+   ============================================================================ */
 
-  // Estados principais
-  const [profile, setProfile] = useState<UserProfile>(initialProfile);
-  const [resume, setResume] = useState<ResumeData>(initialResume);
-  const [jobs, setJobs] = useState<RecommendedJob[]>(initialJobs);
-  const [applications] = useState<JobApplication[]>(initialApplications);
-  const [quota, setQuota] = useState<DailyQuota>(initialQuota);
+const USER_DASHBOARD_CSS = `
+.ud-app {
+  --bg-main: #000000;
+  --bg-surface: #111111;
+  --bg-card: #222222;
+  --border-color: #333333;
+  --border-subtle: #222222;
+  --text-primary: #eae4d9;
+  --text-muted: #888888;
+  --accent-beige: #d4c4a8;
+  --accent-blue: #3b82f6;
+  --accent-blue-soft: rgba(59, 130, 246, 0.15);
+  --status-ok: #7fff00;
+  --status-err: #dc143c;
+  --status-warn: #facc15;
 
-  // Estados da aba Vagas
-  const [filters, setFilters] = useState<JobFilters>({
-    keywords: '',
-    modality: 'todas',
-    seniority: 'todos',
-    location: '',
-    onlySaved: false,
+  display: flex;
+  min-height: 100vh;
+  font-family: sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  transition: 0.35s ease;
+}
+
+.ud-app *,
+.ud-app *::before,
+.ud-app *::after {
+  box-sizing: border-box;
+}
+
+.ud-app h1,
+.ud-app h2,
+.ud-app h3,
+.ud-app h4 {
+  color: var(--text-primary);
+  margin: 0;
+  transition: 0.35s ease;
+}
+
+.ud-app p {
+  color: var(--text-muted);
+  margin: 0;
+  transition: 0.35s ease;
+}
+
+/* Sidebar Fixa (280px) */
+.ud-sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 280px;
+  min-width: 280px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  left: 0;
+  background-color: var(--bg-surface);
+  border-right: 2px solid var(--border-subtle);
+  padding: 24px 16px;
+  overflow-y: auto;
+  transition: 0.35s ease;
+}
+
+.ud-sidebar-top {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ud-brand-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 16px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ud-brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background-color: var(--accent-blue-soft);
+  border: 1px solid var(--accent-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-blue);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.ud-brand-title h2 {
+  font-size: 17px;
+  letter-spacing: 0.3px;
+}
+
+.ud-brand-title span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.ud-nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ud-nav-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  padding: 4px 12px;
+}
+
+.ud-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: left;
+  transition: 0.2s;
+}
+
+.ud-nav-item i {
+  width: 20px;
+  text-align: center;
+  font-size: 15px;
+}
+
+.ud-nav-item:hover {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.ud-nav-item.active {
+  background-color: var(--bg-card);
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+
+.ud-nav-item.active i {
+  color: var(--accent-blue);
+}
+
+.ud-sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ud-btn-outline {
+  width: 100%;
+  height: 44px;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: 0.2s;
+}
+
+.ud-btn-outline:hover {
+  background-color: var(--bg-card);
+  border-color: var(--accent-blue);
+}
+
+.ud-btn-outline.danger:hover {
+  border-color: var(--status-err);
+  color: #f87171;
+}
+
+/* Área Principal e Header */
+.ud-main {
+  flex: 1;
+  padding: 24px 40px 48px 40px;
+  max-width: calc(100vw - 280px);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.ud-header-context h1 {
+  font-size: 24px;
+}
+
+.ud-header-context p {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.ud-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* Switch de Tema */
+.ud-theme-switch {
+  width: 90px;
+  height: 44px;
+  background-color: #333333;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.5);
+  border-radius: 50px;
+  border: none;
+  position: relative;
+  cursor: pointer;
+  transition: 0.4s;
+  flex-shrink: 0;
+}
+
+.ud-theme-indicator {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  top: 0;
+  left: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: #000000;
+  border-radius: 25px;
+  transform: scale(0.88);
+  color: #eae4d9;
+  position: absolute;
+  transition: 0.4s;
+}
+
+.ud-theme-switch.light {
+  background-color: #bba98e;
+}
+
+.ud-theme-switch.light .ud-theme-indicator {
+  left: 46px;
+  background-color: #eae4d9;
+  color: #000000;
+}
+
+/* Faixa de Telemetria e Cards de Métricas */
+.ud-telemetry-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 20px;
+}
+
+.ud-telemetry-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid var(--border-subtle);
+  padding-right: 12px;
+}
+
+.ud-telemetry-item:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+
+.ud-telemetry-item span {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.ud-telemetry-item strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.ud-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.ud-metric-card {
+  display: flex;
+  align-items: center;
+  min-height: 110px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px 20px;
+  gap: 18px;
+  transition: 0.2s;
+}
+
+.ud-metric-card:hover {
+  background-color: var(--bg-surface);
+  border-color: var(--accent-blue);
+}
+
+.ud-metric-card i {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.ud-metric-card h2 {
+  font-size: 26px;
+}
+
+.ud-metric-card p {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* Painéis, Formulários, Botões e Badges */
+.ud-panel {
+  background-color: var(--bg-surface);
+  border: 2px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ud-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ud-panel-header h3 {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ud-panel-header h3 i {
+  color: var(--accent-blue);
+}
+
+.ud-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.ud-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ud-form-group label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: bold;
+}
+
+.ud-input,
+.ud-select,
+.ud-textarea {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 13px;
+  padding: 0 12px;
+  outline: none;
+  transition: 0.2s;
+  font-family: inherit;
+  width: 100%;
+}
+
+.ud-input,
+.ud-select {
+  height: 40px;
+}
+
+.ud-textarea {
+  padding: 10px 12px;
+  min-height: 92px;
+  resize: vertical;
+}
+
+.ud-input:focus,
+.ud-select:focus,
+.ud-textarea:focus {
+  border-color: var(--accent-blue);
+}
+
+.ud-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.ud-btn-primary {
+  background-color: var(--accent-blue);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  height: 40px;
+  padding: 0 18px;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: 0.2s;
+}
+
+.ud-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.ud-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ud-btn-secondary {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+  transition: 0.2s;
+}
+
+.ud-btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+}
+
+.ud-btn-secondary.saved {
+  border-color: var(--accent-beige);
+  color: var(--accent-beige);
+}
+
+.ud-btn-danger {
+  background-color: rgba(220, 20, 60, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 8px;
+  height: 40px;
+  padding: 0 18px;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.ud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.ud-badge-neutral {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.ud-badge-blue {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.ud-badge-ok {
+  background-color: rgba(127, 255, 0, 0.12);
+  color: #84cc16;
+  border: 1px solid rgba(132, 204, 22, 0.4);
+}
+
+.ud-badge-warn {
+  background-color: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+}
+
+.ud-alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-main);
+  color: var(--text-muted);
+}
+
+.ud-alert.error {
+  border-color: rgba(248, 113, 113, 0.5);
+  background-color: rgba(220, 20, 60, 0.1);
+  color: #f87171;
+}
+
+.ud-alert.warn {
+  border-color: rgba(250, 204, 21, 0.5);
+  background-color: rgba(250, 204, 21, 0.08);
+  color: #facc15;
+}
+
+.ud-alert.ok {
+  border-color: rgba(132, 204, 22, 0.4);
+  background-color: rgba(127, 255, 0, 0.08);
+  color: #84cc16;
+}
+
+/* Grid de Vagas e Modal de Planos */
+.ud-jobs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.ud-job-card {
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  transition: 0.2s;
+}
+
+.ud-job-card:hover {
+  border-color: var(--accent-blue);
+}
+
+.ud-job-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ud-job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ud-adherence-bar {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-card);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ud-adherence-fill {
+  height: 100%;
+  background-color: var(--accent-blue);
+  border-radius: 999px;
+}
+
+.ud-job-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ud-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.ud-modal-card {
+  background-color: var(--bg-surface);
+  border: 2px solid var(--border-color);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 780px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ud-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.ud-plan-card {
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ud-plan-card.featured {
+  border-color: var(--accent-blue);
+}
+
+.ud-plan-price {
+  font-size: 26px;
+  font-weight: bold;
+  color: var(--text-primary);
+}
+
+/* Modo Claro (.light) */
+.ud-app.light {
+  background-color: #eae4d9;
+  color: #000000;
+}
+
+.ud-app.light h1,
+.ud-app.light h2,
+.ud-app.light h3,
+.ud-app.light h4,
+.ud-app.light .ud-telemetry-item strong,
+.ud-app.light .ud-plan-price {
+  color: #000000;
+}
+
+.ud-app.light p,
+.ud-app.light .ud-nav-label,
+.ud-app.light .ud-telemetry-item span {
+  color: #444444;
+}
+
+.ud-app.light .ud-sidebar {
+  background-color: #eae4d9;
+  border-right: none;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
+}
+
+.ud-app.light .ud-brand-header,
+.ud-app.light .ud-sidebar-bottom,
+.ud-app.light .ud-header {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.ud-app.light .ud-nav-item {
+  color: #444444;
+}
+
+.ud-app.light .ud-nav-item:hover,
+.ud-app.light .ud-nav-item.active {
+  background-color: rgba(0, 0, 0, 0.06);
+  color: #000000;
+}
+
+.ud-app.light .ud-metric-card,
+.ud-app.light .ud-panel,
+.ud-app.light .ud-telemetry-strip,
+.ud-app.light .ud-btn-outline,
+.ud-app.light .ud-modal-card {
+  background-color: #eae4d9;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
+  color: #000000;
+}
+
+.ud-app.light .ud-input,
+.ud-app.light .ud-select,
+.ud-app.light .ud-textarea,
+.ud-app.light .ud-job-card,
+.ud-app.light .ud-plan-card,
+.ud-app.light .ud-btn-secondary,
+.ud-app.light .ud-badge-neutral,
+.ud-app.light .ud-alert {
+  background-color: #dfd7c8;
+  color: #000000;
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+/* Responsividade */
+@media (max-width: 1100px) {
+  .ud-metrics-grid,
+  .ud-telemetry-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ud-plans-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .ud-app {
+    flex-direction: column;
+  }
+  .ud-sidebar {
+    width: 100%;
+    min-width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 2px solid var(--border-subtle);
+  }
+  .ud-nav-menu {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .ud-nav-item {
+    white-space: nowrap;
+  }
+  .ud-main {
+    max-width: 100vw;
+    padding: 20px;
+  }
+  .ud-metrics-grid,
+  .ud-telemetry-strip,
+  .ud-jobs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+`;
+
+/* ============================================================================
+   3. CLIENTE HTTP E CONSTANTES DE PLANOS
+   ============================================================================ */
+
+const API_BASE_URL =
+  (typeof import.meta !== 'undefined' &&
+    (import.meta as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL) ||
+  '/api';
+
+class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem('auth_token');
+  const isFormData = options.body instanceof FormData;
+
+  const headers: HeadersInit = {
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+    credentials: 'include',
   });
-  const [isSearching, setIsSearching] = useState(false);
-  const [savingJobId, setSavingJobId] = useState<string | null>(null);
-  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
-  const [showAllApplications, setShowAllApplications] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Modal de Planos e Ampliação de Limite
+  if (!response.ok) {
+    let errorMessage = `Erro na requisição (${response.status})`;
+    let errorCode: string | undefined;
+    try {
+      const payload = await response.json();
+      errorMessage = payload.message || payload.detail || errorMessage;
+      errorCode = payload.code;
+    } catch {
+      // Mantém mensagem padrão se resposta não for JSON
+    }
+    throw new ApiError(errorMessage, response.status, errorCode);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
+const userDashboardApi = {
+  obterCotaDiaria: () => apiRequest<DailyQuotaStatus>('/user/jobs/quota'),
+  criarSessaoPagamentoPlano: (planId: QuotaPlan['id']) =>
+    apiRequest<{ checkoutUrl: string }>('/billing/quota-checkout', {
+      method: 'POST',
+      body: JSON.stringify({ planId }),
+    }),
+  listarVagasSelecionadasIA: () => apiRequest<JobListing[]>('/user/jobs/ai-selected'),
+  filtrarVagas: (filtros: JobFilterParams) => {
+    const params = new URLSearchParams();
+    if (filtros.palavraChave) params.set('q', filtros.palavraChave);
+    if (filtros.modalidade && filtros.modalidade !== 'todos') {
+      params.set('modalidade', filtros.modalidade);
+    }
+    if (filtros.localizacao) params.set('localizacao', filtros.localizacao);
+    if (filtros.tipoContrato) params.set('contrato', filtros.tipoContrato);
+    if (filtros.aderenciaMinima > 0) {
+      params.set('aderenciaMinima', String(filtros.aderenciaMinima));
+    }
+    return apiRequest<{ vagas: JobListing[]; cota: DailyQuotaStatus }>(
+      `/user/jobs/search?${params.toString()}`
+    );
+  },
+  listarVagasCandidatadas: () => apiRequest<JobListing[]>('/user/jobs/applied'),
+  alternarSalvarVaga: (jobId: string, salvar: boolean) =>
+    apiRequest<{ jobId: string; salva: boolean }>(`/user/jobs/${jobId}/save`, {
+      method: salvar ? 'POST' : 'DELETE',
+    }),
+  obterPerfil: () => apiRequest<UserProfile>('/user/profile'),
+  atualizarPerfil: (dados: Omit<UserProfile, 'id' | 'email'>) =>
+    apiRequest<UserProfile>('/user/profile', {
+      method: 'PUT',
+      body: JSON.stringify(dados),
+    }),
+  obterCurriculo: () => apiRequest<UserResume>('/user/resume'),
+  enviarArquivoCurriculoIA: (arquivo: File) => {
+    const formData = new FormData();
+    formData.append('file', arquivo);
+    return apiRequest<UserResume>('/user/resume/parse-ai', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+  salvarCurriculo: (curriculo: UserResume) =>
+    apiRequest<UserResume>('/user/resume', {
+      method: 'PUT',
+      body: JSON.stringify(curriculo),
+    }),
+  alterarEmail: (novoEmail: string, senhaAtual: string) =>
+    apiRequest<{ email: string }>('/user/account/email', {
+      method: 'PATCH',
+      body: JSON.stringify({ novoEmail, senhaAtual }),
+    }),
+  alterarSenha: (senhaAtual: string, novaSenha: string) =>
+    apiRequest<void>('/user/account/password', {
+      method: 'PATCH',
+      body: JSON.stringify({ senhaAtual, novaSenha }),
+    }),
+  excluirConta: (senhaAtual: string) =>
+    apiRequest<void>('/user/account', {
+      method: 'DELETE',
+      body: JSON.stringify({ senhaAtual }),
+    }),
+  logout: () =>
+    apiRequest<void>('/auth/logout', {
+      method: 'POST',
+    }),
+};
+
+const QUOTA_PLANS: QuotaPlan[] = [
+  {
+    id: 'plan_50',
+    nome: 'Pacote Básico +50',
+    vagasExtras: 50,
+    precoReais: 19.99,
+    precoFormatado: 'R$ 19,99',
+    descricao: 'Amplia seu limite diário em +50 buscas de vagas.',
+  },
+  {
+    id: 'plan_75',
+    nome: 'Pacote Intermediário +75',
+    vagasExtras: 75,
+    precoReais: 39.9,
+    precoFormatado: 'R$ 39,90',
+    descricao: 'Amplia seu limite diário em +75 buscas de vagas.',
+  },
+  {
+    id: 'plan_100',
+    nome: 'Pacote Avançado +100',
+    vagasExtras: 100,
+    precoReais: 49.9,
+    precoFormatado: 'R$ 49,90',
+    descricao: 'Amplia seu limite diário em +100 buscas de vagas.',
+  },
+];
+
+const EMPTY_RESUME: UserResume = {
+  sobre: '',
+  experiencias: [],
+  projetosPessoais: [],
+  habilidades: [],
+  idiomas: [],
+  formacoes: [],
+};
+
+const TAB_METADATA: Record<DashboardTab, { title: string; subtitle: string }> = {
+  vagas: {
+    title: 'Vagas & Recomendações IA',
+    subtitle: 'Vagas selecionadas por aderência, filtros personalizados e histórico de candidaturas',
+  },
+  perfil: {
+    title: 'Perfil do Usuário',
+    subtitle: 'Gerenciamento das informações pessoais da conta',
+  },
+  curriculo: {
+    title: 'Currículo',
+    subtitle: 'Upload de documento PDF/DOCX com extração por IA e edição manual completa',
+  },
+  configuracoes: {
+    title: 'Configurações da Conta',
+    subtitle: 'Alteração de e-mail, senha, encerramento de sessão e exclusão de conta',
+  },
+};
+
+function generateItemId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/* ============================================================================
+   4. COMPONENTE PRINCIPAL UNIFICADO
+   ============================================================================ */
+
+export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({ onRedirectLogin }) => {
+  const [activeTab, setActiveTab] = useState<DashboardTab>('vagas');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('dashboard_theme') as 'dark' | 'light') || 'dark';
+  });
+
+  // Estados Globais
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [resume, setResume] = useState<UserResume>(EMPTY_RESUME);
+  const [aiJobs, setAiJobs] = useState<JobListing[]>([]);
+  const [appliedJobs, setAppliedJobs] = useState<JobListing[]>([]);
+  const [quota, setQuota] = useState<DailyQuotaStatus | null>(null);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+
+  // Modal de Planos
   const [plansModalOpen, setPlansModalOpen] = useState(false);
-  const [limitExceeded, setLimitExceeded] = useState(false);
-  const [purchasingPkgId, setPurchasingPkgId] = useState<string | null>(null);
+  const [plansLimitReached, setPlansLimitReached] = useState(false);
+  const [loadingPlanId, setLoadingPlanId] = useState<QuotaPlan['id'] | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
 
-  // Estados da aba Usuário (sem foto de perfil; e-mail bloqueado)
-  const [firstName, setFirstName] = useState(initialProfile.firstName);
-  const [lastName, setLastName] = useState(initialProfile.lastName);
-  const [age, setAge] = useState<number | ''>(initialProfile.age);
-  const [gender, setGender] = useState<UserProfile['gender']>(initialProfile.gender);
+  // Aba Vagas
+  const [jobsSubView, setJobsSubView] = useState<'recomendadas' | 'candidatadas'>('recomendadas');
+  const [filters, setFilters] = useState<JobFilterParams>({
+    palavraChave: '',
+    modalidade: 'todos',
+    localizacao: '',
+    tipoContrato: '',
+    aderenciaMinima: 0,
+  });
+  const [searchingJobs, setSearchingJobs] = useState(false);
+  const [savingJobId, setSavingJobId] = useState<string | null>(null);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+
+  // Aba Perfil
+  const [perfilNome, setPerfilNome] = useState('');
+  const [perfilSobrenome, setPerfilSobrenome] = useState('');
+  const [perfilIdade, setPerfilIdade] = useState<number | ''>('');
+  const [perfilSexo, setPerfilSexo] = useState<UserSex>('');
   const [savingProfile, setSavingProfile] = useState(false);
-  const [profileFeedback, setProfileFeedback] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
+  const [profileMsg, setProfileMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
-  // Estados da aba Currículo
-  const [selectedResumeFile, setSelectedResumeFile] = useState<File | undefined>(undefined);
-  const [extractingResume, setExtractingResume] = useState(false);
+  // Aba Currículo
+  const [skillInput, setSkillInput] = useState('');
+  const [selectedResumeFile, setSelectedResumeFile] = useState<File | null>(null);
+  const [parsingResumeAI, setParsingResumeAI] = useState(false);
   const [savingResume, setSavingResume] = useState(false);
-  const [resumeFeedback, setResumeFeedback] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
+  const [resumeMsg, setResumeMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
-  // Estados da aba Configurações
-  const [newEmail, setNewEmail] = useState(initialProfile.email);
-  const [emailPassword, setEmailPassword] = useState('');
-  const [savingEmail, setSavingEmail] = useState(false);
-  const [emailFeedback, setEmailFeedback] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
+  // Aba Configurações
+  const [novoEmail, setNovoEmail] = useState('');
+  const [senhaParaEmail, setSenhaParaEmail] = useState('');
+  const [loadingEmail, setLoadingEmail] = useState(false);
+  const [senhaAtual, setSenhaAtual] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
+  const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('');
+  const [loadingSenha, setLoadingSenha] = useState(false);
+  const [senhaExclusao, setSenhaExclusao] = useState('');
+  const [confirmacaoExclusao, setConfirmacaoExclusao] = useState('');
+  const [loadingDelete, setLoadingDelete] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [passwordFeedback, setPasswordFeedback] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
+  useEffect(() => {
+    localStorage.setItem('dashboard_theme', theme);
+  }, [theme]);
 
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
-  const [deletingAccount, setDeletingAccount] = useState(false);
-  const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    async function loadAllData() {
+      setLoadingInitial(true);
+      const [profileRes, resumeRes, aiJobsRes, appliedRes, quotaRes] = await Promise.allSettled([
+        userDashboardApi.obterPerfil(),
+        userDashboardApi.obterCurriculo(),
+        userDashboardApi.listarVagasSelecionadasIA(),
+        userDashboardApi.listarVagasCandidatadas(),
+        userDashboardApi.obterCotaDiaria(),
+      ]);
 
-  // Tokens visuais alinhados ao Anexo 2 (Dark) e alternativa Light
-  const ui = {
-    page: isDark ? 'bg-[#000000] text-[#f8fafc]' : 'bg-slate-100 text-slate-900',
-    heroCard: isDark
-      ? 'bg-[#0f172a] border-[#1e293b]'
-      : 'bg-white border-slate-200 shadow-sm',
-    metricCard: isDark
-      ? 'bg-[#1e293b]/90 border-[#2d3b52]'
-      : 'bg-slate-50 border-slate-200',
-    card: isDark
-      ? 'bg-[#0a0a0a] border-[#1f242d]'
-      : 'bg-white border-slate-200 shadow-sm',
-    divider: isDark ? 'border-[#1a1e26]' : 'border-slate-200',
-    pillBtn: isDark
-      ? 'bg-[#1e293b] hover:bg-[#293548] border-[#2d3b52] text-slate-200'
-      : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800',
-    primaryBtn:
-      'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white',
-    dangerBtn: isDark
-      ? 'bg-red-950/60 hover:bg-red-950 border-red-900/80 text-red-400'
-      : 'bg-red-50 hover:bg-red-100 border-red-200 text-red-700',
-    emeraldBadge: isDark
-      ? 'bg-emerald-950/90 border-emerald-800/80 text-emerald-400'
-      : 'bg-emerald-50 border-emerald-200 text-emerald-700',
-    amberBadge: isDark
-      ? 'bg-amber-950/90 border-amber-800/80 text-amber-400'
-      : 'bg-amber-50 border-amber-200 text-amber-700',
-    input: isDark
-      ? 'bg-[#0d1117] border-[#262c36] text-slate-100 placeholder:text-slate-500 focus:border-blue-500'
-      : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-600',
-    subText: isDark ? 'text-slate-400' : 'text-slate-600',
-    mutedText: isDark ? 'text-slate-500' : 'text-slate-500',
-  };
+      if (!active) return;
 
-  // Métricas superiores
-  const foundCount = jobs.length;
-  const compatibleCount = jobs.filter((job) => job.matchPercentage >= 70).length;
-  const applicationsCount = applications.length;
-  const remainingDailyQuota = Math.max(0, quota.dailyLimit - quota.usedToday);
-
-  // Handlers de navegação e sessão
-  const handleLogout = async () => {
-    if (services?.onLogout) {
-      await services.onLogout();
-    }
-    navigate('/login');
-  };
-
-  // Busca de vagas com controle de limite diário (50 vagas/dia)
-  const executeJobSearch = async () => {
-    setSearchError(null);
-
-    if (quota.usedToday >= quota.dailyLimit) {
-      setLimitExceeded(true);
-      setPlansModalOpen(true);
-      return;
-    }
-
-    if (!services?.onSearchJobs) {
-      setSearchError('Serviço de busca de vagas não conectado à API.');
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const results = await services.onSearchJobs(filters);
-      const availableSlots = Math.max(0, quota.dailyLimit - quota.usedToday);
-      const allowedResults = results.slice(0, availableSlots);
-
-      setJobs(allowedResults);
-      const nextUsed = Math.min(quota.dailyLimit, quota.usedToday + allowedResults.length);
-      setQuota((prev) => ({ ...prev, usedToday: nextUsed }));
-
-      if (results.length > availableSlots || nextUsed >= quota.dailyLimit) {
-        setLimitExceeded(true);
-        setPlansModalOpen(true);
+      if (profileRes.status === 'fulfilled') {
+        const p = profileRes.value;
+        setProfile(p);
+        setPerfilNome(p.nome || '');
+        setPerfilSobrenome(p.sobrenome || '');
+        setPerfilIdade(p.idade ?? '');
+        setPerfilSexo(p.sexo || '');
       }
+      if (resumeRes.status === 'fulfilled') {
+        setResume({ ...EMPTY_RESUME, ...resumeRes.value });
+      }
+      if (aiJobsRes.status === 'fulfilled') setAiJobs(aiJobsRes.value);
+      if (appliedRes.status === 'fulfilled') setAppliedJobs(appliedRes.value);
+      if (quotaRes.status === 'fulfilled') setQuota(quotaRes.value);
+
+      setLoadingInitial(false);
+    }
+
+    loadAllData();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const limiteTotal = quota ? quota.limiteBaseDiario + quota.bonusAdquirido : 50;
+  const consumidas = quota?.consumidasHoje ?? 0;
+  const restantes = quota?.restantesHoje ?? Math.max(0, limiteTotal - consumidas);
+  const limiteEsgotado = quota !== null && restantes <= 0;
+  const currentMeta = TAB_METADATA[activeTab];
+
+  const handleOpenPlans = (limitReached = false) => {
+    setPlanError(null);
+    setPlansLimitReached(limitReached);
+    setPlansModalOpen(true);
+  };
+
+  const handleSelectPlan = async (plan: QuotaPlan) => {
+    setPlanError(null);
+    setLoadingPlanId(plan.id);
+    try {
+      const { checkoutUrl } = await userDashboardApi.criarSessaoPagamentoPlano(plan.id);
+      if (checkoutUrl) window.location.href = checkoutUrl;
     } catch (err) {
-      setSearchError(
-        err instanceof Error ? err.message : 'Erro ao buscar vagas recomendadas pela IA.'
+      setPlanError(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível iniciar o pagamento. Verifique a integração com o gateway.'
       );
     } finally {
-      setIsSearching(false);
+      setLoadingPlanId(null);
     }
   };
 
-  const handleFilterSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    void executeJobSearch();
+  const handleLoggedOut = () => {
+    localStorage.removeItem('auth_token');
+    if (onRedirectLogin) {
+      onRedirectLogin();
+    } else {
+      window.location.href = '/login';
+    }
   };
 
-  const handleToggleSaveJob = async (job: RecommendedJob) => {
-    const nextSaved = !job.isSaved;
-    setSavingJobId(job.id);
+  // Handlers Aba Vagas
+  const handleFilterJobs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setJobsError(null);
+    if (limiteEsgotado) {
+      handleOpenPlans(true);
+      return;
+    }
+    setSearchingJobs(true);
     try {
-      if (services?.onToggleSaveJob) {
-        await services.onToggleSaveJob(job.id, nextSaved);
+      const res = await userDashboardApi.filtrarVagas(filters);
+      setAiJobs(res.vagas);
+      setQuota(res.cota);
+      setJobsSubView('recomendadas');
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 402 || err.status === 429 || err.code === 'DAILY_LIMIT_REACHED')
+      ) {
+        handleOpenPlans(true);
+      } else {
+        setJobsError(err instanceof ApiError ? err.message : 'Erro ao buscar vagas filtradas.');
       }
-      setJobs((prev) =>
-        prev.map((item) => (item.id === job.id ? { ...item, isSaved: nextSaved } : item))
+    } finally {
+      setSearchingJobs(false);
+    }
+  };
+
+  const handleToggleSaveJob = async (job: JobListing) => {
+    setSavingJobId(job.id);
+    setJobsError(null);
+    try {
+      const res = await userDashboardApi.alternarSalvarVaga(job.id, !job.salva);
+      setAiJobs((prev) =>
+        prev.map((item) => (item.id === job.id ? { ...item, salva: res.salva } : item))
+      );
+    } catch (err) {
+      setJobsError(
+        err instanceof ApiError ? err.message : 'Não foi possível atualizar o salvamento da vaga.'
       );
     } finally {
       setSavingJobId(null);
     }
   };
 
-  const handlePurchasePackage = async (pkg: QuotaPackage) => {
-    setPlanError(null);
-    setPurchasingPkgId(pkg.id);
-    try {
-      if (services?.onPurchaseQuotaPackage) {
-        const { newDailyLimit } = await services.onPurchaseQuotaPackage(pkg);
-        setQuota((prev) => ({ ...prev, dailyLimit: newDailyLimit }));
-      } else {
-        setQuota((prev) => ({ ...prev, dailyLimit: prev.dailyLimit + pkg.extraJobs }));
-      }
-      setLimitExceeded(false);
-      setPlansModalOpen(false);
-    } catch (err) {
-      setPlanError(
-        err instanceof Error ? err.message : 'Não foi possível concluir o pagamento do pacote.'
-      );
-    } finally {
-      setPurchasingPkgId(null);
-    }
-  };
-
-  // Handlers Aba Usuário
-  const handleSaveProfile = async (e: FormEvent<HTMLFormElement>) => {
+  // Handlers Aba Perfil
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfileFeedback(null);
     setSavingProfile(true);
+    setProfileMsg(null);
     try {
-      const payload = {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        age,
-        gender,
-      };
-      if (services?.onUpdateProfile) {
-        await services.onUpdateProfile(payload);
-      }
-      setProfile((prev) => ({ ...prev, ...payload }));
-      setProfileFeedback({ type: 'success', text: 'Informações do perfil salvas com sucesso.' });
+      const updated = await userDashboardApi.atualizarPerfil({
+        nome: perfilNome.trim(),
+        sobrenome: perfilSobrenome.trim(),
+        idade: perfilIdade === '' ? '' : Number(perfilIdade),
+        sexo: perfilSexo,
+      });
+      setProfile(updated);
+      setProfileMsg({ type: 'ok', text: 'Informações do perfil atualizadas com sucesso.' });
     } catch (err) {
-      setProfileFeedback({
+      setProfileMsg({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Erro ao atualizar informações do perfil.',
+        text: err instanceof ApiError ? err.message : 'Erro ao salvar dados do perfil.',
       });
     } finally {
       setSavingProfile(false);
@@ -421,123 +1298,63 @@ export function DashboardPage({
   };
 
   // Handlers Aba Currículo
-  const handleResumeFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handleResumeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setResumeMsg(null);
     const file = e.target.files?.[0];
     if (!file) return;
 
     const lower = file.name.toLowerCase();
     const validExt = lower.endsWith('.pdf') || lower.endsWith('.docx');
-    const validMime = ACCEPTED_MIME_TYPES.includes(file.type) || validExt;
+    const validMime =
+      !file.type ||
+      file.type === 'application/pdf' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-    if (!validMime) {
-      setResumeFeedback({
+    if (!validExt || !validMime) {
+      setResumeMsg({
         type: 'error',
-        text: 'Formato inválido. Selecione apenas arquivos PDF ou DOCX.',
+        text: 'Formato inválido. Envie apenas arquivos em PDF (.pdf) ou DOCX (.docx).',
       });
       e.target.value = '';
+      setSelectedResumeFile(null);
       return;
     }
-
-    setResumeFeedback(null);
     setSelectedResumeFile(file);
-
-    try {
-      if (services?.onUploadResumeFile) {
-        const uploaded = await services.onUploadResumeFile(file);
-        setResume((prev) => ({
-          ...prev,
-          fileName: uploaded.fileName,
-          fileUrl: uploaded.fileUrl ?? prev.fileUrl,
-        }));
-      } else {
-        setResume((prev) => ({ ...prev, fileName: file.name }));
-      }
-      setResumeFeedback({
-        type: 'success',
-        text: `Documento "${file.name}" carregado com sucesso.`,
-      });
-    } catch (err) {
-      setResumeFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Falha ao enviar o currículo.',
-      });
-    }
   };
 
   const handleExtractResumeAI = async () => {
-    if (!services?.onExtractResumeWithAI) {
-      setResumeFeedback({
-        type: 'error',
-        text: 'Serviço de extração de currículo por IA não conectado.',
-      });
-      return;
-    }
-
-    setResumeFeedback(null);
-    setExtractingResume(true);
+    if (!selectedResumeFile) return;
+    setParsingResumeAI(true);
+    setResumeMsg(null);
     try {
-      const extracted = await services.onExtractResumeWithAI(selectedResumeFile);
-      setResume((prev) => ({ ...prev, ...extracted }));
-      setResumeFeedback({
-        type: 'success',
-        text: 'Campos preenchidos automaticamente pela inteligência artificial.',
+      const extracted = await userDashboardApi.enviarArquivoCurriculoIA(selectedResumeFile);
+      setResume({ ...EMPTY_RESUME, ...extracted });
+      setResumeMsg({
+        type: 'ok',
+        text: 'Currículo processado pela IA e campos preenchidos automaticamente.',
       });
     } catch (err) {
-      setResumeFeedback({
+      setResumeMsg({
         type: 'error',
-        text:
-          err instanceof Error
-            ? err.message
-            : 'Não foi possível extrair os dados do currículo com IA.',
+        text: err instanceof ApiError ? err.message : 'Falha ao processar o currículo com a IA.',
       });
     } finally {
-      setExtractingResume(false);
+      setParsingResumeAI(false);
     }
   };
 
-  const handleAddLanguage = () => {
-    setResume((prev) => ({
-      ...prev,
-      languages: [
-        ...prev.languages,
-        { id: `lang_${Date.now()}`, language: '', level: 'intermediario' },
-      ],
-    }));
-  };
-
-  const handleUpdateLanguage = (
-    id: string,
-    field: 'language' | 'level',
-    value: string
-  ) => {
-    setResume((prev) => ({
-      ...prev,
-      languages: prev.languages.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      ),
-    }));
-  };
-
-  const handleRemoveLanguage = (id: string) => {
-    setResume((prev) => ({
-      ...prev,
-      languages: prev.languages.filter((item) => item.id !== id),
-    }));
-  };
-
-  const handleSaveResume = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSaveResume = async (e: React.FormEvent) => {
     e.preventDefault();
-    setResumeFeedback(null);
     setSavingResume(true);
+    setResumeMsg(null);
     try {
-      if (services?.onSaveResumeData) {
-        await services.onSaveResumeData(resume);
-      }
-      setResumeFeedback({ type: 'success', text: 'Currículo atualizado com sucesso.' });
+      const saved = await userDashboardApi.salvarCurriculo(resume);
+      setResume({ ...EMPTY_RESUME, ...saved });
+      setResumeMsg({ type: 'ok', text: 'Currículo salvo com sucesso.' });
     } catch (err) {
-      setResumeFeedback({
+      setResumeMsg({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Erro ao salvar dados do currículo.',
+        text: err instanceof ApiError ? err.message : 'Erro ao salvar o currículo.',
       });
     } finally {
       setSavingResume(false);
@@ -545,603 +1362,578 @@ export function DashboardPage({
   };
 
   // Handlers Aba Configurações
-  const handleChangeEmail = async (e: FormEvent<HTMLFormElement>) => {
+  const handleChangeEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEmailFeedback(null);
-    setSavingEmail(true);
+    setLoadingEmail(true);
+    setSettingsMsg(null);
     try {
-      if (services?.onChangeEmail) {
-        await services.onChangeEmail(newEmail.trim(), emailPassword);
-      }
-      setProfile((prev) => ({ ...prev, email: newEmail.trim() }));
-      setEmailPassword('');
-      setEmailFeedback({ type: 'success', text: 'E-mail atualizado com sucesso.' });
+      const res = await userDashboardApi.alterarEmail(novoEmail.trim(), senhaParaEmail);
+      const updatedEmail = res.email || novoEmail.trim();
+      setProfile((prev) => (prev ? { ...prev, email: updatedEmail } : prev));
+      setNovoEmail('');
+      setSenhaParaEmail('');
+      setSettingsMsg({ type: 'ok', text: 'E-mail alterado com sucesso.' });
     } catch (err) {
-      setEmailFeedback({
+      setSettingsMsg({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Erro ao alterar o e-mail.',
+        text: err instanceof ApiError ? err.message : 'Erro ao alterar e-mail.',
       });
     } finally {
-      setSavingEmail(false);
+      setLoadingEmail(false);
     }
   };
 
-  const handleChangePassword = async (e: FormEvent<HTMLFormElement>) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordFeedback(null);
-    if (newPassword !== confirmPassword) {
-      setPasswordFeedback({
+    setSettingsMsg(null);
+    if (novaSenha !== confirmarNovaSenha) {
+      setSettingsMsg({ type: 'error', text: 'A nova senha e a confirmação não coincidem.' });
+      return;
+    }
+    setLoadingSenha(true);
+    try {
+      await userDashboardApi.alterarSenha(senhaAtual, novaSenha);
+      setSenhaAtual('');
+      setNovaSenha('');
+      setConfirmarNovaSenha('');
+      setSettingsMsg({ type: 'ok', text: 'Senha alterada com sucesso.' });
+    } catch (err) {
+      setSettingsMsg({
         type: 'error',
-        text: 'A nova senha e a confirmação não coincidem.',
+        text: err instanceof ApiError ? err.message : 'Erro ao alterar a senha.',
+      });
+    } finally {
+      setLoadingSenha(false);
+    }
+  };
+
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsMsg(null);
+    if (confirmacaoExclusao !== 'EXCLUIR') {
+      setSettingsMsg({
+        type: 'error',
+        text: 'Digite EXCLUIR em letras maiúsculas para confirmar a exclusão permanente.',
       });
       return;
     }
-    setSavingPassword(true);
+    setLoadingDelete(true);
     try {
-      if (services?.onChangePassword) {
-        await services.onChangePassword(currentPassword, newPassword);
-      }
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setPasswordFeedback({ type: 'success', text: 'Senha alterada com sucesso.' });
+      await userDashboardApi.excluirConta(senhaExclusao);
+      handleLoggedOut();
     } catch (err) {
-      setPasswordFeedback({
+      setSettingsMsg({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Erro ao alterar a senha.',
+        text: err instanceof ApiError ? err.message : 'Erro ao excluir a conta.',
       });
     } finally {
-      setSavingPassword(false);
+      setLoadingDelete(false);
     }
   };
 
-  const handleDeleteAccount = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setDeleteFeedback(null);
-    if (deleteConfirmText !== 'EXCLUIR') {
-      setDeleteFeedback('Digite EXCLUIR em letras maiúsculas para confirmar a exclusão.');
-      return;
-    }
-    setDeletingAccount(true);
-    try {
-      if (services?.onDeleteAccount) {
-        await services.onDeleteAccount(deleteConfirmText);
-      }
-      navigate('/');
-    } catch (err) {
-      setDeleteFeedback(
-        err instanceof Error ? err.message : 'Não foi possível excluir a conta.'
-      );
-      setDeletingAccount(false);
-    }
+  const formatModalidade = (mod: JobListing['modalidade']) => {
+    if (mod === 'remoto') return 'Remoto';
+    if (mod === 'presencial') return 'Presencial';
+    return 'Híbrido';
   };
 
-  const visibleJobs = filters.onlySaved ? jobs.filter((job) => job.isSaved) : jobs;
-  const visibleApplications = showAllApplications ? applications : applications.slice(0, 5);
-
-  const modalityLabel: Record<RecommendedJob['modality'], string> = {
-    remoto: 'Remoto',
-    hibrido: 'Híbrida',
-    presencial: 'Presencial',
-  };
-
-  const tabs: { id: DashboardTab; label: string }[] = [
-    { id: 'vagas', label: 'Vagas' },
-    { id: 'usuario', label: 'Usuário' },
-    { id: 'curriculo', label: 'Currículo' },
-    { id: 'configuracoes', label: 'Configurações' },
-  ];
+  const vagasExibidas = jobsSubView === 'recomendadas' ? aiJobs : appliedJobs;
 
   return (
-    <div className={`min-h-screen px-4 py-7 sm:px-6 transition-colors duration-200 ${ui.page}`}>
-      <div className="mx-auto flex max-w-[920px] flex-col gap-7">
-        {/* Card Superior Principal (Fiel ao Anexo 2) */}
-        <header className={`rounded-2xl border p-5 sm:p-6 transition-colors ${ui.heroCard}`}>
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <Bot className="h-5 w-5 text-blue-500" />
-                <h1 className="text-lg font-bold tracking-tight">JobHunter AI</h1>
-              </div>
-              <p className={`mt-1 text-sm ${ui.subText}`}>
-                Painel pessoal de oportunidades e candidaturas
-              </p>
+    <div className={`ud-app ${theme === 'light' ? 'light' : ''}`}>
+      <style>{USER_DASHBOARD_CSS}</style>
+
+      {/* SIDEBAR FIXA */}
+      <aside className="ud-sidebar">
+        <div className="ud-sidebar-top">
+          <div className="ud-brand-header">
+            <div className="ud-brand-icon">
+              <i className="fa-solid fa-layer-group"></i>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate('/')}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.pillBtn}`}
-              >
-                <Home className="h-3.5 w-3.5" />
-                Início
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void executeJobSearch()}
-                disabled={isSearching}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.pillBtn}`}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isSearching ? 'animate-spin' : ''}`} />
-                {isSearching ? 'Varrendo...' : 'Nova varredura'}
-              </button>
-
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${ui.emeraldBadge}`}
-                title="Cota diária restante de busca de vagas"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Agente ativo · {remainingDailyQuota}/{quota.dailyLimit} vagas
-              </span>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setLimitExceeded(false);
-                  setPlansModalOpen(true);
-                }}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.primaryBtn}`}
-              >
-                <CreditCard className="h-3.5 w-3.5" />
-                Planos
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.pillBtn}`}
-                aria-label="Alternar modo claro e escuro"
-              >
-                {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-                {isDark ? 'Modo claro' : 'Modo escuro'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void handleLogout()}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.dangerBtn}`}
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                Sair
-              </button>
+            <div className="ud-brand-title">
+              <h2>Painel do Candidato</h2>
+              <span>AI Job Matching</span>
             </div>
           </div>
 
-          {/* Métricas internas (Anexo 2) */}
-          <div className="mt-5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-            <div className={`rounded-xl border px-5 py-4 ${ui.metricCard}`}>
-              <div className="text-2xl font-bold">{foundCount}</div>
-              <div className={`mt-1 text-xs ${ui.subText}`}>Encontradas</div>
-            </div>
-            <div className={`rounded-xl border px-5 py-4 ${ui.metricCard}`}>
-              <div className="text-2xl font-bold">{compatibleCount}</div>
-              <div className={`mt-1 text-xs ${ui.subText}`}>Compatíveis</div>
-            </div>
-            <div className={`rounded-xl border px-5 py-4 ${ui.metricCard}`}>
-              <div className="text-2xl font-bold">{applicationsCount}</div>
-              <div className={`mt-1 text-xs ${ui.subText}`}>Candidaturas</div>
-            </div>
-          </div>
+          <nav className="ud-nav-menu" aria-label="Navegação do Painel">
+            <span className="ud-nav-label">Menu Principal</span>
 
-          {/* Abas de navegação do Dashboard */}
-          <nav
-            aria-label="Seções do painel"
-            className={`mt-5 flex flex-wrap gap-2 border-t pt-4 ${ui.divider}`}
-          >
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                    isActive
-                      ? isDark
-                        ? 'bg-[#1e293b] text-white border border-[#2d3b52]'
-                        : 'bg-slate-900 text-white border border-slate-900'
-                      : `${ui.subText} hover:opacity-90`
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              className={`ud-nav-item ${activeTab === 'vagas' ? 'active' : ''}`}
+              onClick={() => setActiveTab('vagas')}
+            >
+              <i className="fa-solid fa-briefcase"></i>
+              <span>Vagas</span>
+            </button>
+
+            <button
+              type="button"
+              className={`ud-nav-item ${activeTab === 'perfil' ? 'active' : ''}`}
+              onClick={() => setActiveTab('perfil')}
+            >
+              <i className="fa-solid fa-user"></i>
+              <span>Perfil</span>
+            </button>
+
+            <button
+              type="button"
+              className={`ud-nav-item ${activeTab === 'curriculo' ? 'active' : ''}`}
+              onClick={() => setActiveTab('curriculo')}
+            >
+              <i className="fa-solid fa-file-lines"></i>
+              <span>Currículo</span>
+            </button>
+
+            <button
+              type="button"
+              className={`ud-nav-item ${activeTab === 'configuracoes' ? 'active' : ''}`}
+              onClick={() => setActiveTab('configuracoes')}
+            >
+              <i className="fa-solid fa-gear"></i>
+              <span>Configurações</span>
+            </button>
           </nav>
+        </div>
+
+        <div className="ud-sidebar-bottom">
+          <span className="ud-nav-label" style={{ paddingLeft: 4 }}>
+            Cota & Sessão
+          </span>
+          <button type="button" className="ud-btn-outline" onClick={() => handleOpenPlans(false)}>
+            <i className="fa-solid fa-bolt" style={{ color: '#3b82f6' }}></i>
+            <span>
+              Ampliar Limite ({restantes}/{limiteTotal})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="ud-btn-outline danger"
+            onClick={async () => {
+              try {
+                await userDashboardApi.logout();
+              } finally {
+                handleLoggedOut();
+              }
+            }}
+          >
+            <i className="fa-solid fa-right-from-bracket"></i>
+            <span>Sair da Conta</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* CONTEÚDO PRINCIPAL */}
+      <main className="ud-main">
+        <header className="ud-header">
+          <div className="ud-header-context">
+            <h1>{currentMeta.title}</h1>
+            <p>{currentMeta.subtitle}</p>
+          </div>
+
+          <div className="ud-header-controls">
+            <span className={`ud-badge ${restantes > 0 ? 'ud-badge-blue' : 'ud-badge-warn'}`}>
+              <i className="fa-solid fa-magnifying-glass"></i> {restantes}/{limiteTotal} buscas hoje
+            </span>
+
+            <button
+              type="button"
+              className="ud-btn-secondary"
+              onClick={() => handleOpenPlans(false)}
+            >
+              <i className="fa-solid fa-crown"></i> Planos
+            </button>
+
+            <button
+              type="button"
+              className={`ud-theme-switch ${theme === 'light' ? 'light' : ''}`}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              title="Alternar modo claro e escuro"
+              aria-label="Alternar modo claro e escuro"
+            >
+              <span className="ud-theme-indicator">
+                <i className={theme === 'dark' ? 'fa-solid fa-cloud-moon' : 'fa-solid fa-sun'}></i>
+              </span>
+            </button>
+          </div>
         </header>
 
-        {/* ==================== ABA 1: VAGAS ==================== */}
+        {/* Faixa de Resumo */}
+        <section className="ud-telemetry-strip">
+          <div className="ud-telemetry-item">
+            <span>Candidato</span>
+            <strong>{profile ? `${profile.nome} ${profile.sobrenome}`.trim() || '--' : '--'}</strong>
+          </div>
+          <div className="ud-telemetry-item">
+            <span>Limite Diário de Busca</span>
+            <strong>{limiteTotal} vagas / dia</strong>
+          </div>
+          <div className="ud-telemetry-item">
+            <span>Vagas Salvas</span>
+            <strong>{aiJobs.filter((j) => j.salva).length}</strong>
+          </div>
+          <div className="ud-telemetry-item">
+            <span>Candidaturas Realizadas</span>
+            <strong>{appliedJobs.length}</strong>
+          </div>
+        </section>
+
+        {/* ================================================================
+            ABA 1: VAGAS
+            ================================================================ */}
         {activeTab === 'vagas' && (
-          <main className="flex flex-col gap-7">
-            {/* Filtro de Preferências de Vagas (independente do currículo) */}
-            <section className={`rounded-xl border p-5 ${ui.card}`}>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-base font-semibold">Preferências e filtro de vagas</h2>
-                <span className={`text-xs ${ui.mutedText}`}>
-                  Limite diário: {quota.usedToday} de {quota.dailyLimit} vagas procuradas hoje
-                </span>
+          <>
+            <div className="ud-metrics-grid">
+              <div className="ud-metric-card">
+                <i className="fa-solid fa-wand-magic-sparkles" style={{ color: 'cornflowerblue' }}></i>
+                <div>
+                  <h2>{aiJobs.length}</h2>
+                  <p>Selecionadas pela IA</p>
+                </div>
               </div>
-
-              {searchError && (
-                <div className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${ui.dangerBtn}`}>
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>{searchError}</span>
+              <div className="ud-metric-card">
+                <i className="fa-solid fa-paper-plane" style={{ color: 'chartreuse' }}></i>
+                <div>
+                  <h2>{appliedJobs.length}</h2>
+                  <p>Já candidatadas</p>
                 </div>
-              )}
-
-              <form onSubmit={handleFilterSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="job-keywords" className={`text-xs font-medium ${ui.subText}`}>
-                    Cargo ou palavras-chave desejadas
-                  </label>
-                  <input
-                    id="job-keywords"
-                    type="text"
-                    placeholder="Ex.: Desenvolvedor Python, Estágio IA..."
-                    value={filters.keywords}
-                    onChange={(e) => setFilters({ ...filters, keywords: e.target.value })}
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="job-modality" className={`text-xs font-medium ${ui.subText}`}>
-                    Modalidade desejada (independente do currículo)
-                  </label>
-                  <select
-                    id="job-modality"
-                    value={filters.modality}
-                    onChange={(e) =>
-                      setFilters({ ...filters, modality: e.target.value as WorkModality })
-                    }
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
-                  >
-                    <option value="todas">Todas (Remoto, Híbrida e Presencial)</option>
-                    <option value="remoto">Remoto</option>
-                    <option value="hibrido">Híbrida</option>
-                    <option value="presencial">Presencial</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="job-seniority" className={`text-xs font-medium ${ui.subText}`}>
-                    Nível da vaga
-                  </label>
-                  <select
-                    id="job-seniority"
-                    value={filters.seniority}
-                    onChange={(e) =>
-                      setFilters({ ...filters, seniority: e.target.value as SeniorityLevel })
-                    }
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
-                  >
-                    <option value="todos">Todos os níveis</option>
-                    <option value="estagio">Estágio</option>
-                    <option value="junior">Júnior</option>
-                    <option value="pleno">Pleno</option>
-                    <option value="senior">Sênior</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="job-location" className={`text-xs font-medium ${ui.subText}`}>
-                    Cidade / Estado (para híbrido ou presencial)
-                  </label>
-                  <input
-                    id="job-location"
-                    type="text"
-                    placeholder="Ex.: Salvador - BA, São Paulo - SP..."
-                    value={filters.location}
-                    onChange={(e) => setFilters({ ...filters, location: e.target.value })}
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2 pt-1">
-                  <label className={`inline-flex items-center gap-2 text-xs cursor-pointer ${ui.subText}`}>
-                    <input
-                      type="checkbox"
-                      checked={filters.onlySaved}
-                      onChange={(e) => setFilters({ ...filters, onlySaved: e.target.checked })}
-                      className="rounded border-slate-600"
-                    />
-                    Exibir apenas vagas salvas
-                  </label>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLimitExceeded(false);
-                        setPlansModalOpen(true);
-                      }}
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${ui.pillBtn}`}
-                    >
-                      Ampliar limite diário
-                    </button>
-
-                    <button
-                      type="submit"
-                      disabled={isSearching}
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
-                    >
-                      <Search className="h-3.5 w-3.5" />
-                      {isSearching ? 'Buscando vagas...' : 'Procurar vagas com IA'}
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </section>
-
-            {/* Oportunidades Recomendadas pela IA (Anexos 1 e 2) */}
-            <section>
-              <div className="mb-3.5 flex items-center justify-between">
-                <h2 className="text-base font-semibold">Oportunidades recomendadas</h2>
-                <span className={`text-xs ${ui.mutedText}`}>
-                  {visibleJobs.length} vaga(s) exibida(s)
-                </span>
               </div>
-
-              {visibleJobs.length === 0 ? (
-                <div className={`rounded-xl border p-6 text-sm ${ui.card} ${ui.subText}`}>
-                  Nenhuma vaga selecionada pela IA encontrada para os critérios atuais. Utilize o
-                  filtro acima ou clique em <strong>Nova varredura</strong> para buscar
-                  oportunidades.
+              <div className="ud-metric-card">
+                <i className="fa-solid fa-bookmark" style={{ color: '#d4c4a8' }}></i>
+                <div>
+                  <h2>{aiJobs.filter((j) => j.salva).length}</h2>
+                  <p>Vagas salvas</p>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3.5">
-                  {visibleJobs.map((job) => {
-                    const isExpanded = expandedJobId === job.id;
-                    return (
-                      <article key={job.id} className={`rounded-xl border p-5 ${ui.card}`}>
-                        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                          <div>
-                            <h3 className="text-base font-semibold">{job.title}</h3>
-                            <p className={`mt-1 text-xs sm:text-sm ${ui.subText}`}>
-                              {job.company} · {modalityLabel[job.modality]}
-                              {job.location ? ` (${job.location})` : ''}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-full border px-3 py-1 text-xs font-semibold ${ui.emeraldBadge}`}
-                            >
-                              {job.matchPercentage}% aderência
-                            </span>
-
-                            <button
-                              type="button"
-                              onClick={() => void handleToggleSaveJob(job)}
-                              disabled={savingJobId === job.id}
-                              aria-pressed={job.isSaved}
-                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
-                                job.isSaved ? ui.primaryBtn : ui.pillBtn
-                              }`}
-                            >
-                              {job.isSaved ? (
-                                <>
-                                  <BookmarkCheck className="h-3.5 w-3.5" />
-                                  Salva
-                                </>
-                              ) : (
-                                <>
-                                  <Bookmark className="h-3.5 w-3.5" />
-                                  Salvar
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="mt-2.5 flex items-center justify-between text-xs">
-                          <span className={ui.mutedText}>Encontrada em {job.foundAt}</span>
-                          {job.isNew && (
-                            <span className="font-medium text-emerald-400">Nova oportunidade</span>
-                          )}
-                        </div>
-
-                        <hr className={`my-3.5 border-t ${ui.divider}`} />
-
-                        <div className="flex items-center justify-between gap-3 text-xs sm:text-sm">
-                          <span className={ui.subText}>{job.compatibilitySummary}</span>
-                          <button
-                            type="button"
-                            onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
-                            className="font-medium hover:underline cursor-pointer shrink-0"
-                          >
-                            {isExpanded ? 'Ocultar requisitos' : 'Ver requisitos'}
-                          </button>
-                        </div>
-
-                        {isExpanded && job.requirements.length > 0 && (
-                          <ul
-                            className={`mt-3 list-disc space-y-1 rounded-lg border p-3.5 pl-7 text-xs ${ui.metricCard} ${ui.subText}`}
-                          >
-                            {job.requirements.map((req, index) => (
-                              <li key={index}>{req}</li>
-                            ))}
-                          </ul>
-                        )}
-
-                        <div className="mt-4 flex items-center justify-between">
-                          <a
-                            href={job.externalUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
-                          >
-                            Link: visualizar oportunidade
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Histórico de Candidaturas (Anexos 1 e 2) */}
-            <section>
-              <h2 className="mb-3.5 text-base font-semibold">Histórico de candidaturas</h2>
-
-              <div className={`rounded-xl border p-5 ${ui.card}`}>
-                {applications.length === 0 ? (
-                  <p className={`text-sm ${ui.subText}`}>
-                    Nenhuma candidatura registrada até o momento.
-                  </p>
-                ) : (
-                  <>
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-sm">
-                        <thead>
-                          <tr className={`border-b text-left text-xs ${ui.divider} ${ui.subText}`}>
-                            <th className="py-2.5 font-medium">Empresa</th>
-                            <th className="py-2.5 font-medium">Inscrição</th>
-                            <th className="py-2.5 text-right font-medium">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {visibleApplications.map((app) => {
-                            const isPositive =
-                              app.status === 'Enviada' || app.status === 'Entrevista';
-                            return (
-                              <tr key={app.id} className={`border-b ${ui.divider}`}>
-                                <td className="py-3.5 font-medium">
-                                  {app.company}
-                                  {app.roleTitle ? (
-                                    <span className={`ml-2 text-xs font-normal ${ui.subText}`}>
-                                      · {app.roleTitle}
-                                    </span>
-                                  ) : null}
-                                </td>
-                                <td className={`py-3.5 text-xs sm:text-sm ${ui.subText}`}>
-                                  {app.appliedAt}
-                                </td>
-                                <td className="py-3.5 text-right">
-                                  <span
-                                    className={`inline-block rounded-full border px-3 py-0.5 text-xs font-medium ${
-                                      isPositive ? ui.emeraldBadge : ui.amberBadge
-                                    }`}
-                                  >
-                                    {app.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {applications.length > 5 && (
-                      <div className="mt-4 flex justify-center">
-                        <button
-                          type="button"
-                          onClick={() => setShowAllApplications((prev) => !prev)}
-                          aria-label={
-                            showAllApplications ? 'Recolher histórico' : 'Expandir histórico'
-                          }
-                          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors cursor-pointer ${ui.pillBtn}`}
-                        >
-                          {showAllApplications ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
               </div>
-            </section>
-          </main>
-        )}
-
-        {/* ==================== ABA 2: USUÁRIO (SEM FOTO DE PERFIL) ==================== */}
-        {activeTab === 'usuario' && (
-          <main className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
-            <div className="mb-5">
-              <h2 className="text-base font-semibold">Informações do Usuário</h2>
-              <p className={`mt-1 text-xs sm:text-sm ${ui.subText}`}>
-                Dados cadastrais da sua conta. O e-mail permanece bloqueado nesta aba por segurança.
-              </p>
+              <div className="ud-metric-card">
+                <i
+                  className="fa-solid fa-gauge-high"
+                  style={{ color: limiteEsgotado ? 'crimson' : 'yellow' }}
+                ></i>
+                <div>
+                  <h2>
+                    {restantes}/{limiteTotal}
+                  </h2>
+                  <p>Buscas restantes hoje</p>
+                </div>
+              </div>
             </div>
 
-            {profileFeedback && (
-              <div
-                className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${
-                  profileFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
-                }`}
-              >
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>{profileFeedback.text}</span>
+            {limiteEsgotado && (
+              <div className="ud-alert warn">
+                <span>
+                  <i className="fa-solid fa-triangle-exclamation"></i> Limite diário de{' '}
+                  {limiteTotal} vagas atingido. Amplie sua cota para continuar procurando hoje.
+                </span>
+                <button type="button" className="ud-btn-primary" onClick={() => handleOpenPlans(true)}>
+                  <i className="fa-solid fa-bolt"></i> Ver Planos de Ampliação
+                </button>
               </div>
             )}
 
-            <form onSubmit={handleSaveProfile} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="user-first-name" className={`text-xs font-medium ${ui.subText}`}>
-                  Nome
-                </label>
+            {jobsError && (
+              <div className="ud-alert error">
+                <span>
+                  <i className="fa-solid fa-circle-exclamation"></i> {jobsError}
+                </span>
+              </div>
+            )}
+
+            {/* Formulário de Filtro (inclui valores além do currículo: remoto, presencial, híbrido) */}
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-filter"></i> Filtro de Busca de Vagas
+                </h3>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span className="ud-badge ud-badge-neutral">
+                    Cota diária: {consumidas} de {limiteTotal} utilizadas
+                  </span>
+                  <button
+                    type="button"
+                    className="ud-btn-secondary"
+                    onClick={() => handleOpenPlans(false)}
+                  >
+                    <i className="fa-solid fa-crown"></i> Planos
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleFilterJobs} className="ud-form-grid">
+                <div className="ud-form-group">
+                  <label htmlFor="filtro-palavra">Cargo ou Palavra-chave</label>
+                  <input
+                    id="filtro-palavra"
+                    type="text"
+                    className="ud-input"
+                    placeholder="Ex: Desenvolvedor Python, Backend..."
+                    value={filters.palavraChave}
+                    onChange={(e) => setFilters({ ...filters, palavraChave: e.target.value })}
+                  />
+                </div>
+
+                <div className="ud-form-group">
+                  <label htmlFor="filtro-modalidade">Modalidade de Trabalho</label>
+                  <select
+                    id="filtro-modalidade"
+                    className="ud-select"
+                    value={filters.modalidade}
+                    onChange={(e) =>
+                      setFilters({ ...filters, modalidade: e.target.value as WorkModality })
+                    }
+                  >
+                    <option value="todos">Todas as modalidades</option>
+                    <option value="remoto">Remoto</option>
+                    <option value="presencial">Presencial</option>
+                    <option value="hibrido">Híbrido</option>
+                  </select>
+                </div>
+
+                <div className="ud-form-group">
+                  <label htmlFor="filtro-local">Cidade / Estado / País</label>
+                  <input
+                    id="filtro-local"
+                    type="text"
+                    className="ud-input"
+                    placeholder="Ex: São Paulo, Brasil, Remoto Global"
+                    value={filters.localizacao}
+                    onChange={(e) => setFilters({ ...filters, localizacao: e.target.value })}
+                  />
+                </div>
+
+                <div className="ud-form-group">
+                  <label htmlFor="filtro-contrato">Tipo de Contratação</label>
+                  <select
+                    id="filtro-contrato"
+                    className="ud-select"
+                    value={filters.tipoContrato}
+                    onChange={(e) => setFilters({ ...filters, tipoContrato: e.target.value })}
+                  >
+                    <option value="">Qualquer formato</option>
+                    <option value="clt">CLT</option>
+                    <option value="pj">PJ</option>
+                    <option value="estagio">Estágio</option>
+                    <option value="freelance">Freelance / Temporário</option>
+                  </select>
+                </div>
+
+                <div className="ud-form-group">
+                  <label htmlFor="filtro-aderencia">Aderência Mínima (%)</label>
+                  <input
+                    id="filtro-aderencia"
+                    type="number"
+                    min={0}
+                    max={100}
+                    className="ud-input"
+                    value={filters.aderenciaMinima}
+                    onChange={(e) =>
+                      setFilters({ ...filters, aderenciaMinima: Number(e.target.value) || 0 })
+                    }
+                  />
+                </div>
+
+                <div className="ud-form-group">
+                  <button type="submit" className="ud-btn-primary" disabled={searchingJobs}>
+                    <i className="fa-solid fa-magnifying-glass"></i>
+                    {searchingJobs ? 'Buscando...' : 'Buscar Vagas'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Listagem: Selecionadas pela IA vs Já Candidatadas */}
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={
+                      jobsSubView === 'recomendadas' ? 'ud-btn-primary' : 'ud-btn-secondary'
+                    }
+                    onClick={() => setJobsSubView('recomendadas')}
+                  >
+                    <i className="fa-solid fa-robot"></i> Selecionadas pela IA ({aiJobs.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      jobsSubView === 'candidatadas' ? 'ud-btn-primary' : 'ud-btn-secondary'
+                    }
+                    onClick={() => setJobsSubView('candidatadas')}
+                  >
+                    <i className="fa-solid fa-circle-check"></i> Já Candidatadas (
+                    {appliedJobs.length})
+                  </button>
+                </div>
+              </div>
+
+              {loadingInitial ? (
+                <p style={{ padding: '24px 0', textAlign: 'center' }}>
+                  Carregando vagas sincronizadas com o servidor...
+                </p>
+              ) : vagasExibidas.length === 0 ? (
+                <p style={{ padding: '24px 0', textAlign: 'center' }}>
+                  {jobsSubView === 'recomendadas'
+                    ? 'Nenhuma vaga selecionada pela IA encontrada para os critérios atuais.'
+                    : 'Você ainda não possui candidaturas registradas.'}
+                </p>
+              ) : (
+                <div className="ud-jobs-grid">
+                  {vagasExibidas.map((job) => (
+                    <article key={job.id} className="ud-job-card">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div className="ud-job-top">
+                          <div>
+                            <h4 style={{ fontSize: 16 }}>{job.titulo}</h4>
+                            <span style={{ fontSize: 13, color: '#888888' }}>{job.empresa}</span>
+                          </div>
+                          <span
+                            className={`ud-badge ${
+                              job.aderenciaPercentual >= 80
+                                ? 'ud-badge-ok'
+                                : job.aderenciaPercentual >= 50
+                                ? 'ud-badge-blue'
+                                : 'ud-badge-warn'
+                            }`}
+                          >
+                            {job.aderenciaPercentual}% de aderência
+                          </span>
+                        </div>
+
+                        <div className="ud-adherence-bar">
+                          <div
+                            className="ud-adherence-fill"
+                            style={{
+                              width: `${Math.min(100, Math.max(0, job.aderenciaPercentual))}%`,
+                            }}
+                          />
+                        </div>
+
+                        <div className="ud-job-meta">
+                          <span className="ud-badge ud-badge-neutral">
+                            <i className="fa-solid fa-location-dot"></i>{' '}
+                            {formatModalidade(job.modalidade)}
+                          </span>
+                          {job.localizacao && <span>• {job.localizacao}</span>}
+                          {job.tipoContrato && <span>• {job.tipoContrato}</span>}
+                          {job.salario && <span>• {job.salario}</span>}
+                        </div>
+
+                        {job.resumo && <p style={{ fontSize: 13, lineHeight: 1.45 }}>{job.resumo}</p>}
+
+                        {jobsSubView === 'candidatadas' && job.dataCandidatura && (
+                          <span className="ud-badge ud-badge-ok" style={{ alignSelf: 'flex-start' }}>
+                            Candidatura enviada em {job.dataCandidatura}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="ud-job-actions">
+                        {jobsSubView === 'recomendadas' && (
+                          <button
+                            type="button"
+                            className={`ud-btn-secondary ${job.salva ? 'saved' : ''}`}
+                            disabled={savingJobId === job.id}
+                            onClick={() => handleToggleSaveJob(job)}
+                          >
+                            <i
+                              className={
+                                job.salva ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'
+                              }
+                            ></i>
+                            {job.salva ? 'Remover dos Salvos' : 'Salvar Vaga'}
+                          </button>
+                        )}
+
+                        <a
+                          href={job.urlVaga}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ud-btn-primary"
+                          style={{ flex: 1 }}
+                        >
+                          <i className="fa-solid fa-arrow-up-right-from-square"></i> Acessar Vaga
+                        </a>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ================================================================
+            ABA 2: PERFIL DO USUÁRIO (SEM FOTO DE PERFIL E COM E-MAIL BLOQUEADO)
+            ================================================================ */}
+        {activeTab === 'perfil' && (
+          <div className="ud-panel">
+            <div className="ud-panel-header">
+              <h3>
+                <i className="fa-solid fa-user"></i> Dados Pessoais do Usuário
+              </h3>
+              <span className="ud-badge ud-badge-neutral">
+                <i className="fa-solid fa-lock"></i> Alteração de e-mail disponível em Configurações
+              </span>
+            </div>
+
+            {profileMsg && (
+              <div className={`ud-alert ${profileMsg.type}`}>
+                <span>{profileMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="ud-form-grid">
+              <div className="ud-form-group">
+                <label htmlFor="perfil-nome">Nome</label>
                 <input
-                  id="user-first-name"
+                  id="perfil-nome"
                   type="text"
+                  className="ud-input"
                   required
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  value={perfilNome}
+                  onChange={(e) => setPerfilNome(e.target.value)}
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="user-last-name" className={`text-xs font-medium ${ui.subText}`}>
-                  Sobrenome
-                </label>
+              <div className="ud-form-group">
+                <label htmlFor="perfil-sobrenome">Sobrenome</label>
                 <input
-                  id="user-last-name"
+                  id="perfil-sobrenome"
                   type="text"
+                  className="ud-input"
                   required
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  value={perfilSobrenome}
+                  onChange={(e) => setPerfilSobrenome(e.target.value)}
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="user-age" className={`text-xs font-medium ${ui.subText}`}>
-                  Idade
-                </label>
+              <div className="ud-form-group">
+                <label htmlFor="perfil-idade">Idade</label>
                 <input
-                  id="user-age"
+                  id="perfil-idade"
                   type="number"
                   min={14}
                   max={120}
-                  required
-                  value={age}
+                  className="ud-input"
+                  value={perfilIdade}
                   onChange={(e) =>
-                    setAge(e.target.value === '' ? '' : Number(e.target.value))
+                    setPerfilIdade(e.target.value === '' ? '' : Number(e.target.value))
                   }
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="user-gender" className={`text-xs font-medium ${ui.subText}`}>
-                  Sexo
-                </label>
+              <div className="ud-form-group">
+                <label htmlFor="perfil-sexo">Sexo</label>
                 <select
-                  id="user-gender"
-                  required
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value as UserProfile['gender'])}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  id="perfil-sexo"
+                  className="ud-select"
+                  value={perfilSexo}
+                  onChange={(e) => setPerfilSexo(e.target.value as UserSex)}
                 >
-                  <option value="">Selecione</option>
+                  <option value="">Selecione...</option>
                   <option value="masculino">Masculino</option>
                   <option value="feminino">Feminino</option>
                   <option value="outro">Outro</option>
@@ -1149,502 +1941,798 @@ export function DashboardPage({
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1.5 sm:col-span-2">
-                <label
-                  htmlFor="user-locked-email"
-                  className={`inline-flex items-center gap-1.5 text-xs font-medium ${ui.subText}`}
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  E-mail (bloqueado para alteração nesta aba)
-                </label>
+              <div className="ud-form-group" style={{ gridColumn: '1 / -1' }}>
+                <label htmlFor="perfil-email">E-mail (Bloqueado para alteração nesta aba)</label>
                 <input
-                  id="user-locked-email"
+                  id="perfil-email"
                   type="email"
-                  value={profile.email}
+                  className="ud-input"
+                  value={profile?.email || ''}
                   disabled
                   readOnly
-                  className={`rounded-lg border px-3 py-2 text-sm opacity-65 cursor-not-allowed ${ui.input}`}
+                  aria-readonly="true"
                 />
-                <p className={`text-xs ${ui.mutedText}`}>
-                  Para alterar o seu endereço de e-mail, utilize a aba{' '}
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('configuracoes')}
-                    className="text-blue-500 underline cursor-pointer"
-                  >
-                    Configurações
-                  </button>
-                  .
-                </p>
               </div>
 
-              <div className="flex justify-end sm:col-span-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={savingProfile}
-                  className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
-                >
-                  {savingProfile ? 'Salvando...' : 'Salvar informações'}
+              <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="submit" className="ud-btn-primary" disabled={savingProfile}>
+                  <i className="fa-solid fa-floppy-disk"></i>
+                  {savingProfile ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>
-          </main>
+          </div>
         )}
 
-        {/* ==================== ABA 3: CURRÍCULO ==================== */}
+        {/* ================================================================
+            ABA 3: CURRÍCULO (UPLOAD PDF/DOCX + IA + CAMPOS MANUAIS)
+            ================================================================ */}
         {activeTab === 'curriculo' && (
-          <main className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
-            <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-              <div>
-                <h2 className="text-base font-semibold">Currículo</h2>
-                <p className={`mt-1 text-xs sm:text-sm ${ui.subText}`}>
-                  Envie seu currículo em PDF ou DOCX e preencha os campos manualmente ou com IA.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => void handleExtractResumeAI()}
-                disabled={extractingResume || (!selectedResumeFile && !resume.fileName)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                {extractingResume ? 'Preenchendo com IA...' : 'Preencher campos com IA'}
-              </button>
-            </div>
-
-            {resumeFeedback && (
-              <div
-                className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${
-                  resumeFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
-                }`}
-              >
-                <span>{resumeFeedback.text}</span>
+          <form
+            onSubmit={handleSaveResume}
+            style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
+          >
+            {resumeMsg && (
+              <div className={`ud-alert ${resumeMsg.type}`}>
+                <span>{resumeMsg.text}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveResume} className="flex flex-col gap-4">
-              {/* Upload PDF ou DOCX */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="resume-doc-input"
-                  className={`inline-flex items-center gap-1.5 text-xs font-medium ${ui.subText}`}
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  Arquivo do currículo (somente PDF ou DOCX)
-                </label>
-                <input
-                  id="resume-doc-input"
-                  type="file"
-                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  onChange={(e) => void handleResumeFileChange(e)}
-                  className={`rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1 file:text-xs file:font-medium file:text-white hover:file:bg-blue-500 ${ui.input}`}
-                />
-                {resume.fileName && (
-                  <span className={`text-xs ${ui.mutedText}`}>
-                    Documento anexado: <strong>{resume.fileName}</strong>
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-file-arrow-up"></i> Documento do Currículo (PDF ou DOCX)
+                </h3>
+                {resume.arquivoNome && (
+                  <span className="ud-badge ud-badge-blue">
+                    Arquivo atual: {resume.arquivoNome}
                   </span>
                 )}
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="resume-about" className={`text-xs font-medium ${ui.subText}`}>
-                  Sobre
-                </label>
-                <textarea
-                  id="resume-about"
-                  rows={3}
-                  placeholder="Resumo profissional e objetivos..."
-                  value={resume.about}
-                  onChange={(e) => setResume({ ...resume, about: e.target.value })}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                />
-              </div>
+              <div className="ud-form-grid">
+                <div className="ud-form-group" style={{ gridColumn: 'span 2' }}>
+                  <label htmlFor="curriculo-arquivo">Selecionar arquivo (.pdf ou .docx)</label>
+                  <input
+                    id="curriculo-arquivo"
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="ud-input"
+                    style={{ paddingTop: 8 }}
+                    onChange={handleResumeFileChange}
+                  />
+                </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="resume-experiences" className={`text-xs font-medium ${ui.subText}`}>
-                  Experiências
-                </label>
-                <textarea
-                  id="resume-experiences"
-                  rows={4}
-                  placeholder="Histórico profissional, cargos, empresas e responsabilidades..."
-                  value={resume.experiences}
-                  onChange={(e) => setResume({ ...resume, experiences: e.target.value })}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="resume-projects" className={`text-xs font-medium ${ui.subText}`}>
-                  Projetos pessoais
-                </label>
-                <textarea
-                  id="resume-projects"
-                  rows={3}
-                  placeholder="Projetos desenvolvidos, tecnologias utilizadas e resultados..."
-                  value={resume.personalProjects}
-                  onChange={(e) => setResume({ ...resume, personalProjects: e.target.value })}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="resume-skills" className={`text-xs font-medium ${ui.subText}`}>
-                  Habilidades
-                </label>
-                <textarea
-                  id="resume-skills"
-                  rows={3}
-                  placeholder="Linguagens, frameworks, ferramentas e competências..."
-                  value={resume.skills}
-                  onChange={(e) => setResume({ ...resume, skills: e.target.value })}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                />
-              </div>
-
-              {/* Idiomas e seu nível */}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-medium ${ui.subText}`}>
-                    Idiomas e seu nível
-                  </span>
+                <div className="ud-form-group">
                   <button
                     type="button"
-                    onClick={handleAddLanguage}
-                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium cursor-pointer ${ui.pillBtn}`}
+                    className="ud-btn-primary"
+                    disabled={!selectedResumeFile || parsingResumeAI}
+                    onClick={handleExtractResumeAI}
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    Adicionar idioma
+                    <i className="fa-solid fa-wand-magic-sparkles"></i>
+                    {parsingResumeAI ? 'Extraindo com IA...' : 'Preencher Campos via IA'}
                   </button>
                 </div>
-
-                {resume.languages.length === 0 ? (
-                  <p className={`text-xs ${ui.mutedText}`}>Nenhum idioma adicionado.</p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {resume.languages.map((item) => (
-                      <div
-                        key={item.id}
-                        className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px_auto]"
-                      >
-                        <input
-                          type="text"
-                          placeholder="Ex.: Inglês, Espanhol..."
-                          value={item.language}
-                          onChange={(e) =>
-                            handleUpdateLanguage(item.id, 'language', e.target.value)
-                          }
-                          className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                        />
-                        <select
-                          value={item.level}
-                          onChange={(e) =>
-                            handleUpdateLanguage(
-                              item.id,
-                              'level',
-                              e.target.value as LanguageProficiency
-                            )
-                          }
-                          className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                        >
-                          <option value="basico">Básico</option>
-                          <option value="intermediario">Intermediário</option>
-                          <option value="avancado">Avançado</option>
-                          <option value="fluente_nativo">Fluente / Nativo</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveLanguage(item.id)}
-                          aria-label="Remover idioma"
-                          className={`inline-flex items-center justify-center rounded-lg border px-3 py-2 text-xs font-medium cursor-pointer ${ui.dangerBtn}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
+            </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="resume-education" className={`text-xs font-medium ${ui.subText}`}>
-                  Formações (faculdades, cursos e certificados)
-                </label>
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-align-left"></i> Sobre
+                </h3>
+              </div>
+              <div className="ud-form-group">
+                <label htmlFor="cv-sobre">Resumo Profissional</label>
                 <textarea
-                  id="resume-education"
-                  rows={3}
-                  placeholder="Graduação, cursos complementares, certificações e instituições..."
-                  value={resume.education}
-                  onChange={(e) => setResume({ ...resume, education: e.target.value })}
-                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  id="cv-sobre"
+                  className="ud-textarea"
+                  placeholder="Descreva sua trajetória, objetivos e principais competências..."
+                  value={resume.sobre}
+                  onChange={(e) => setResume({ ...resume, sobre: e.target.value })}
                 />
               </div>
+            </div>
 
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={savingResume}
-                  className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
-                >
-                  {savingResume ? 'Salvando currículo...' : 'Salvar currículo'}
-                </button>
-              </div>
-            </form>
-          </main>
-        )}
-
-        {/* ==================== ABA 4: CONFIGURAÇÕES ==================== */}
-        {activeTab === 'configuracoes' && (
-          <main className="flex flex-col gap-5">
-            {/* Alterar E-mail */}
-            <section className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
-              <h2 className="mb-4 text-base font-semibold">Alterar E-mail</h2>
-
-              {emailFeedback && (
-                <div
-                  className={`mb-4 rounded-lg border p-3 text-xs ${
-                    emailFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
-                  }`}
-                >
-                  {emailFeedback.text}
-                </div>
-              )}
-
-              <form onSubmit={handleChangeEmail} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="cfg-new-email" className={`text-xs font-medium ${ui.subText}`}>
-                    Novo e-mail
-                  </label>
-                  <input
-                    id="cfg-new-email"
-                    type="email"
-                    required
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="cfg-email-pass" className={`text-xs font-medium ${ui.subText}`}>
-                    Senha atual para confirmação
-                  </label>
-                  <input
-                    id="cfg-email-pass"
-                    type="password"
-                    required
-                    value={emailPassword}
-                    onChange={(e) => setEmailPassword(e.target.value)}
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                  />
-                </div>
-
-                <div className="flex justify-end sm:col-span-2">
-                  <button
-                    type="submit"
-                    disabled={savingEmail}
-                    className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
-                  >
-                    {savingEmail ? 'Atualizando...' : 'Atualizar e-mail'}
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            {/* Alterar Senha */}
-            <section className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
-              <h2 className="mb-4 text-base font-semibold">Alterar Senha</h2>
-
-              {passwordFeedback && (
-                <div
-                  className={`mb-4 rounded-lg border p-3 text-xs ${
-                    passwordFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
-                  }`}
-                >
-                  {passwordFeedback.text}
-                </div>
-              )}
-
-              <form onSubmit={handleChangePassword} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5 sm:col-span-2">
-                  <label htmlFor="cfg-curr-pass" className={`text-xs font-medium ${ui.subText}`}>
-                    Senha atual
-                  </label>
-                  <input
-                    id="cfg-curr-pass"
-                    type="password"
-                    required
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="cfg-new-pass" className={`text-xs font-medium ${ui.subText}`}>
-                    Nova senha
-                  </label>
-                  <input
-                    id="cfg-new-pass"
-                    type="password"
-                    required
-                    minLength={6}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="cfg-conf-pass" className={`text-xs font-medium ${ui.subText}`}>
-                    Confirmar nova senha
-                  </label>
-                  <input
-                    id="cfg-conf-pass"
-                    type="password"
-                    required
-                    minLength={6}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
-                  />
-                </div>
-
-                <div className="flex justify-end sm:col-span-2">
-                  <button
-                    type="submit"
-                    disabled={savingPassword}
-                    className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
-                  >
-                    {savingPassword ? 'Alterando...' : 'Alterar senha'}
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            {/* Logout e Exclusão da Conta */}
-            <section className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold">Sessão e Exclusão de Conta</h2>
-                  <p className={`mt-1 text-xs ${ui.subText}`}>
-                    Encerre sua sessão atual ou exclua sua conta permanentemente.
-                  </p>
-                </div>
-
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-briefcase"></i> Experiências Profissionais
+                </h3>
                 <button
                   type="button"
-                  onClick={() => void handleLogout()}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${ui.dangerBtn}`}
+                  className="ud-btn-secondary"
+                  onClick={() =>
+                    setResume({
+                      ...resume,
+                      experiencias: [
+                        ...resume.experiencias,
+                        { id: generateItemId(), cargo: '', empresa: '', periodo: '', descricao: '' },
+                      ],
+                    })
+                  }
                 >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Fazer logout
+                  <i className="fa-solid fa-plus"></i> Adicionar Experiência
                 </button>
               </div>
 
-              <hr className={`my-4 border-t ${ui.divider}`} />
-
-              {deleteFeedback && (
-                <div className={`mb-4 rounded-lg border p-3 text-xs ${ui.dangerBtn}`}>
-                  {deleteFeedback}
+              {resume.experiencias.map((exp, idx) => (
+                <div
+                  key={exp.id}
+                  className="ud-form-grid"
+                  style={{ paddingBottom: 12, borderBottom: '1px solid #222222' }}
+                >
+                  <div className="ud-form-group">
+                    <label>Cargo</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      value={exp.cargo}
+                      onChange={(e) => {
+                        const next = [...resume.experiencias];
+                        next[idx] = { ...exp, cargo: e.target.value };
+                        setResume({ ...resume, experiencias: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Empresa</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      value={exp.empresa}
+                      onChange={(e) => {
+                        const next = [...resume.experiencias];
+                        next[idx] = { ...exp, empresa: e.target.value };
+                        setResume({ ...resume, experiencias: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Período</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      placeholder="Ex: Jan 2025 - Atual"
+                      value={exp.periodo}
+                      onChange={(e) => {
+                        const next = [...resume.experiencias];
+                        next[idx] = { ...exp, periodo: e.target.value };
+                        setResume({ ...resume, experiencias: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <button
+                      type="button"
+                      className="ud-btn-danger"
+                      onClick={() =>
+                        setResume({
+                          ...resume,
+                          experiencias: resume.experiencias.filter((item) => item.id !== exp.id),
+                        })
+                      }
+                    >
+                      <i className="fa-solid fa-trash"></i> Remover
+                    </button>
+                  </div>
+                  <div className="ud-form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Atividades e Resultados</label>
+                    <textarea
+                      className="ud-textarea"
+                      value={exp.descricao}
+                      onChange={(e) => {
+                        const next = [...resume.experiencias];
+                        next[idx] = { ...exp, descricao: e.target.value };
+                        setResume({ ...resume, experiencias: next });
+                      }}
+                    />
+                  </div>
                 </div>
-              )}
+              ))}
+            </div>
 
-              <form onSubmit={handleDeleteAccount} className="flex flex-col gap-3">
-                <label htmlFor="cfg-delete-confirm" className={`text-xs font-medium ${ui.subText}`}>
-                  Para excluir permanentemente sua conta e todos os seus dados, digite{' '}
-                  <strong>EXCLUIR</strong>:
-                </label>
-                <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-code-branch"></i> Projetos Pessoais
+                </h3>
+                <button
+                  type="button"
+                  className="ud-btn-secondary"
+                  onClick={() =>
+                    setResume({
+                      ...resume,
+                      projetosPessoais: [
+                        ...resume.projetosPessoais,
+                        {
+                          id: generateItemId(),
+                          nome: '',
+                          tecnologias: '',
+                          link: '',
+                          descricao: '',
+                        },
+                      ],
+                    })
+                  }
+                >
+                  <i className="fa-solid fa-plus"></i> Adicionar Projeto
+                </button>
+              </div>
+
+              {resume.projetosPessoais.map((proj, idx) => (
+                <div
+                  key={proj.id}
+                  className="ud-form-grid"
+                  style={{ paddingBottom: 12, borderBottom: '1px solid #222222' }}
+                >
+                  <div className="ud-form-group">
+                    <label>Nome do Projeto</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      value={proj.nome}
+                      onChange={(e) => {
+                        const next = [...resume.projetosPessoais];
+                        next[idx] = { ...proj, nome: e.target.value };
+                        setResume({ ...resume, projetosPessoais: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Tecnologias</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      value={proj.tecnologias}
+                      onChange={(e) => {
+                        const next = [...resume.projetosPessoais];
+                        next[idx] = { ...proj, tecnologias: e.target.value };
+                        setResume({ ...resume, projetosPessoais: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Link / Repositório</label>
+                    <input
+                      type="url"
+                      className="ud-input"
+                      value={proj.link}
+                      onChange={(e) => {
+                        const next = [...resume.projetosPessoais];
+                        next[idx] = { ...proj, link: e.target.value };
+                        setResume({ ...resume, projetosPessoais: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <button
+                      type="button"
+                      className="ud-btn-danger"
+                      onClick={() =>
+                        setResume({
+                          ...resume,
+                          projetosPessoais: resume.projetosPessoais.filter(
+                            (item) => item.id !== proj.id
+                          ),
+                        })
+                      }
+                    >
+                      <i className="fa-solid fa-trash"></i> Remover
+                    </button>
+                  </div>
+                  <div className="ud-form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Descrição</label>
+                    <textarea
+                      className="ud-textarea"
+                      value={proj.descricao}
+                      onChange={(e) => {
+                        const next = [...resume.projetosPessoais];
+                        next[idx] = { ...proj, descricao: e.target.value };
+                        setResume({ ...resume, projetosPessoais: next });
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-tags"></i> Habilidades
+                </h3>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input
+                  type="text"
+                  className="ud-input"
+                  style={{ flex: 1 }}
+                  placeholder="Digite uma habilidade e clique em Adicionar"
+                  value={skillInput}
+                  onChange={(e) => setSkillInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const trimmed = skillInput.trim();
+                      if (trimmed && !resume.habilidades.includes(trimmed)) {
+                        setResume({ ...resume, habilidades: [...resume.habilidades, trimmed] });
+                        setSkillInput('');
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="ud-btn-secondary"
+                  onClick={() => {
+                    const trimmed = skillInput.trim();
+                    if (trimmed && !resume.habilidades.includes(trimmed)) {
+                      setResume({ ...resume, habilidades: [...resume.habilidades, trimmed] });
+                      setSkillInput('');
+                    }
+                  }}
+                >
+                  <i className="fa-solid fa-plus"></i> Adicionar
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {resume.habilidades.map((skill) => (
+                  <span key={skill} className="ud-badge ud-badge-blue">
+                    {skill}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setResume({
+                          ...resume,
+                          habilidades: resume.habilidades.filter((s) => s !== skill),
+                        })
+                      }
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                      }}
+                      aria-label={`Remover ${skill}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-language"></i> Idiomas e Nível
+                </h3>
+                <button
+                  type="button"
+                  className="ud-btn-secondary"
+                  onClick={() =>
+                    setResume({
+                      ...resume,
+                      idiomas: [
+                        ...resume.idiomas,
+                        { id: generateItemId(), idioma: '', nivel: 'intermediario' },
+                      ],
+                    })
+                  }
+                >
+                  <i className="fa-solid fa-plus"></i> Adicionar Idioma
+                </button>
+              </div>
+
+              {resume.idiomas.map((lang, idx) => (
+                <div key={lang.id} className="ud-form-grid">
+                  <div className="ud-form-group">
+                    <label>Idioma</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      placeholder="Ex: Inglês, Espanhol"
+                      value={lang.idioma}
+                      onChange={(e) => {
+                        const next = [...resume.idiomas];
+                        next[idx] = { ...lang, idioma: e.target.value };
+                        setResume({ ...resume, idiomas: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Nível</label>
+                    <select
+                      className="ud-select"
+                      value={lang.nivel}
+                      onChange={(e) => {
+                        const next = [...resume.idiomas];
+                        next[idx] = {
+                          ...lang,
+                          nivel: e.target.value as LanguageProficiency,
+                        };
+                        setResume({ ...resume, idiomas: next });
+                      }}
+                    >
+                      <option value="basico">Básico</option>
+                      <option value="intermediario">Intermediário</option>
+                      <option value="avancado">Avançado</option>
+                      <option value="fluente">Fluente</option>
+                      <option value="nativo">Nativo</option>
+                    </select>
+                  </div>
+                  <div className="ud-form-group">
+                    <button
+                      type="button"
+                      className="ud-btn-danger"
+                      onClick={() =>
+                        setResume({
+                          ...resume,
+                          idiomas: resume.idiomas.filter((item) => item.id !== lang.id),
+                        })
+                      }
+                    >
+                      <i className="fa-solid fa-trash"></i> Remover
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-graduation-cap"></i> Formações, Cursos e Certificados
+                </h3>
+                <button
+                  type="button"
+                  className="ud-btn-secondary"
+                  onClick={() =>
+                    setResume({
+                      ...resume,
+                      formacoes: [
+                        ...resume.formacoes,
+                        {
+                          id: generateItemId(),
+                          tipo: 'faculdade',
+                          titulo: '',
+                          instituicao: '',
+                          periodo: '',
+                        },
+                      ],
+                    })
+                  }
+                >
+                  <i className="fa-solid fa-plus"></i> Adicionar Formação
+                </button>
+              </div>
+
+              {resume.formacoes.map((edu, idx) => (
+                <div key={edu.id} className="ud-form-grid">
+                  <div className="ud-form-group">
+                    <label>Tipo</label>
+                    <select
+                      className="ud-select"
+                      value={edu.tipo}
+                      onChange={(e) => {
+                        const next = [...resume.formacoes];
+                        next[idx] = { ...edu, tipo: e.target.value as EducationItem['tipo'] };
+                        setResume({ ...resume, formacoes: next });
+                      }}
+                    >
+                      <option value="faculdade">Faculdade / Graduação</option>
+                      <option value="curso">Curso</option>
+                      <option value="certificado">Certificado</option>
+                    </select>
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Título / Curso</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      value={edu.titulo}
+                      onChange={(e) => {
+                        const next = [...resume.formacoes];
+                        next[idx] = { ...edu, titulo: e.target.value };
+                        setResume({ ...resume, formacoes: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Instituição</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      value={edu.instituicao}
+                      onChange={(e) => {
+                        const next = [...resume.formacoes];
+                        next[idx] = { ...edu, instituicao: e.target.value };
+                        setResume({ ...resume, formacoes: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <label>Período / Conclusão</label>
+                    <input
+                      type="text"
+                      className="ud-input"
+                      value={edu.periodo}
+                      onChange={(e) => {
+                        const next = [...resume.formacoes];
+                        next[idx] = { ...edu, periodo: e.target.value };
+                        setResume({ ...resume, formacoes: next });
+                      }}
+                    />
+                  </div>
+                  <div className="ud-form-group">
+                    <button
+                      type="button"
+                      className="ud-btn-danger"
+                      onClick={() =>
+                        setResume({
+                          ...resume,
+                          formacoes: resume.formacoes.filter((item) => item.id !== edu.id),
+                        })
+                      }
+                    >
+                      <i className="fa-solid fa-trash"></i> Remover
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" className="ud-btn-primary" disabled={savingResume}>
+                <i className="fa-solid fa-floppy-disk"></i>
+                {savingResume ? 'Salvando Currículo...' : 'Salvar Currículo Completo'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ================================================================
+            ABA 4: CONFIGURAÇÕES (E-MAIL, SENHA, LOGOUT E EXCLUIR CONTA)
+            ================================================================ */}
+        {activeTab === 'configuracoes' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {settingsMsg && (
+              <div className={`ud-alert ${settingsMsg.type}`}>
+                <span>{settingsMsg.text}</span>
+              </div>
+            )}
+
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-envelope"></i> Alterar E-mail
+                </h3>
+                <span className="ud-badge ud-badge-neutral">Atual: {profile?.email || '--'}</span>
+              </div>
+
+              <form onSubmit={handleChangeEmail} className="ud-form-grid">
+                <div className="ud-form-group">
+                  <label htmlFor="cfg-novo-email">Novo E-mail</label>
                   <input
-                    id="cfg-delete-confirm"
-                    type="text"
-                    placeholder="EXCLUIR"
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    className={`flex-1 rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                    id="cfg-novo-email"
+                    type="email"
+                    className="ud-input"
+                    required
+                    value={novoEmail}
+                    onChange={(e) => setNovoEmail(e.target.value)}
                   />
-                  <button
-                    type="submit"
-                    disabled={deletingAccount}
-                    className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.dangerBtn}`}
-                  >
-                    {deletingAccount ? 'Excluindo...' : 'Excluir conta'}
+                </div>
+                <div className="ud-form-group">
+                  <label htmlFor="cfg-senha-email">Senha Atual</label>
+                  <input
+                    id="cfg-senha-email"
+                    type="password"
+                    className="ud-input"
+                    required
+                    value={senhaParaEmail}
+                    onChange={(e) => setSenhaParaEmail(e.target.value)}
+                  />
+                </div>
+                <div className="ud-form-group">
+                  <button type="submit" className="ud-btn-primary" disabled={loadingEmail}>
+                    <i className="fa-solid fa-check"></i>
+                    {loadingEmail ? 'Atualizando...' : 'Atualizar E-mail'}
                   </button>
                 </div>
               </form>
-            </section>
-          </main>
-        )}
-      </div>
+            </div>
 
-      {/* ==================== MODAL DE PLANOS E PACOTES DE VAGAS ==================== */}
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-key"></i> Alterar Senha
+                </h3>
+              </div>
+
+              <form onSubmit={handleChangePassword} className="ud-form-grid">
+                <div className="ud-form-group">
+                  <label htmlFor="cfg-senha-atual">Senha Atual</label>
+                  <input
+                    id="cfg-senha-atual"
+                    type="password"
+                    className="ud-input"
+                    required
+                    value={senhaAtual}
+                    onChange={(e) => setSenhaAtual(e.target.value)}
+                  />
+                </div>
+                <div className="ud-form-group">
+                  <label htmlFor="cfg-nova-senha">Nova Senha</label>
+                  <input
+                    id="cfg-nova-senha"
+                    type="password"
+                    className="ud-input"
+                    minLength={8}
+                    required
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                  />
+                </div>
+                <div className="ud-form-group">
+                  <label htmlFor="cfg-confirmar-senha">Confirmar Nova Senha</label>
+                  <input
+                    id="cfg-confirmar-senha"
+                    type="password"
+                    className="ud-input"
+                    minLength={8}
+                    required
+                    value={confirmarNovaSenha}
+                    onChange={(e) => setConfirmarNovaSenha(e.target.value)}
+                  />
+                </div>
+                <div className="ud-form-group">
+                  <button type="submit" className="ud-btn-primary" disabled={loadingSenha}>
+                    <i className="fa-solid fa-shield-halved"></i>
+                    {loadingSenha ? 'Alterando...' : 'Alterar Senha'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="ud-panel">
+              <div className="ud-panel-header">
+                <h3>
+                  <i className="fa-solid fa-right-from-bracket"></i> Sessão e Encerramento
+                </h3>
+                <button
+                  type="button"
+                  className="ud-btn-secondary"
+                  onClick={async () => {
+                    try {
+                      await userDashboardApi.logout();
+                    } finally {
+                      handleLoggedOut();
+                    }
+                  }}
+                >
+                  <i className="fa-solid fa-right-from-bracket"></i> Fazer Logout
+                </button>
+              </div>
+              <p style={{ fontSize: 13 }}>
+                Encerre sua sessão atual neste dispositivo com segurança.
+              </p>
+            </div>
+
+            <div className="ud-panel" style={{ borderColor: 'rgba(220, 20, 60, 0.45)' }}>
+              <div className="ud-panel-header">
+                <h3 style={{ color: '#f87171' }}>
+                  <i className="fa-solid fa-user-xmark" style={{ color: '#f87171' }}></i> Excluir
+                  Conta
+                </h3>
+              </div>
+              <p style={{ fontSize: 13 }}>
+                Esta ação remove permanentemente seu perfil, currículo, candidaturas e histórico de
+                buscas.
+              </p>
+
+              <form onSubmit={handleDeleteAccount} className="ud-form-grid">
+                <div className="ud-form-group">
+                  <label htmlFor="cfg-confirmar-excluir">Digite EXCLUIR para confirmar</label>
+                  <input
+                    id="cfg-confirmar-excluir"
+                    type="text"
+                    className="ud-input"
+                    placeholder="EXCLUIR"
+                    required
+                    value={confirmacaoExclusao}
+                    onChange={(e) => setConfirmacaoExclusao(e.target.value)}
+                  />
+                </div>
+                <div className="ud-form-group">
+                  <label htmlFor="cfg-senha-excluir">Senha Atual</label>
+                  <input
+                    id="cfg-senha-excluir"
+                    type="password"
+                    className="ud-input"
+                    required
+                    value={senhaExclusao}
+                    onChange={(e) => setSenhaExclusao(e.target.value)}
+                  />
+                </div>
+                <div className="ud-form-group">
+                  <button type="submit" className="ud-btn-danger" disabled={loadingDelete}>
+                    <i className="fa-solid fa-trash-can"></i>
+                    {loadingDelete ? 'Excluindo...' : 'Excluir Minha Conta'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* MODAL DE PLANOS DE AMPLIAÇÃO DE LIMITE */}
       {plansModalOpen && (
         <div
+          className="ud-modal-overlay"
           role="dialog"
           aria-modal="true"
           aria-labelledby="plans-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
         >
-          <div className={`w-full max-w-2xl rounded-2xl border p-6 shadow-2xl ${ui.heroCard}`}>
-            <div className="flex items-start justify-between gap-4">
+          <div className="ud-modal-card">
+            <div className="ud-panel-header">
               <div>
-                <h2 id="plans-modal-title" className="text-base font-semibold">
-                  Planos e Ampliação de Limite Diário
-                </h2>
-                <p className={`mt-1 text-xs ${ui.subText}`}>
-                  Consumo atual: {quota.usedToday} de {quota.dailyLimit} vagas procuradas hoje.
+                <h3 id="plans-modal-title">
+                  <i className="fa-solid fa-bolt"></i> Planos de Ampliação de Limite Diário
+                </h3>
+                <p style={{ fontSize: 13, marginTop: 4 }}>
+                  O limite padrão é de 50 vagas por dia. Escolha um pacote adicional para liberar
+                  mais buscas imediatamente.
                 </p>
               </div>
-
               <button
                 type="button"
+                className="ud-btn-secondary"
                 onClick={() => setPlansModalOpen(false)}
-                aria-label="Fechar modal de planos"
-                className={`rounded-lg border p-1.5 cursor-pointer ${ui.pillBtn}`}
               >
-                <X className="h-4 w-4" />
+                <i className="fa-solid fa-xmark"></i> Fechar
               </button>
             </div>
 
-            {limitExceeded && (
-              <div className={`mt-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${ui.amberBadge}`}>
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+            {plansLimitReached && (
+              <div className="ud-alert warn">
                 <span>
-                  Você atingiu o limite diário de {quota.dailyLimit} vagas. Para continuar
-                  procurando vagas hoje, escolha um dos pacotes pagos abaixo.
+                  <i className="fa-solid fa-lock"></i> Você atingiu o limite diário de 50 buscas.
+                  Para continuar procurando hoje, selecione um dos pacotes abaixo.
                 </span>
               </div>
             )}
 
             {planError && (
-              <div className={`mt-4 rounded-lg border p-3 text-xs ${ui.dangerBtn}`}>
-                {planError}
+              <div className="ud-alert error">
+                <span>
+                  <i className="fa-solid fa-triangle-exclamation"></i> {planError}
+                </span>
               </div>
             )}
 
-            <div className="mt-5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-              {QUOTA_PACKAGES.map((pkg) => (
-                <div
-                  key={pkg.id}
-                  className={`flex flex-col justify-between gap-4 rounded-xl border p-4 ${ui.card}`}
-                >
+            <div className="ud-plans-grid">
+              {QUOTA_PLANS.map((plan, idx) => (
+                <div key={plan.id} className={`ud-plan-card ${idx === 1 ? 'featured' : ''}`}>
                   <div>
-                    <div className="text-xl font-bold">{pkg.formattedPrice}</div>
-                    <div className="mt-1 text-sm font-semibold text-blue-500">{pkg.label}</div>
-                    <p className={`mt-2 text-xs ${ui.subText}`}>
-                      Libera imediatamente +{pkg.extraJobs} buscas de vagas no seu limite diário.
-                    </p>
+                    <span className="ud-badge ud-badge-blue">+{plan.vagasExtras} vagas</span>
+                    <h4 style={{ marginTop: 12, fontSize: 16 }}>{plan.nome}</h4>
+                    <div className="ud-plan-price" style={{ marginTop: 8 }}>
+                      {plan.precoFormatado}
+                    </div>
+                    <p style={{ fontSize: 12, marginTop: 8 }}>{plan.descricao}</p>
                   </div>
 
                   <button
                     type="button"
-                    disabled={purchasingPkgId !== null}
-                    onClick={() => void handlePurchasePackage(pkg)}
-                    className={`w-full rounded-lg border px-3 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+                    className="ud-btn-primary"
+                    disabled={loadingPlanId !== null}
+                    onClick={() => handleSelectPlan(plan)}
                   >
-                    {purchasingPkgId === pkg.id ? 'Processando...' : 'Adquirir pacote'}
+                    <i className="fa-solid fa-credit-card"></i>
+                    {loadingPlanId === plan.id ? 'Redirecionando...' : 'Adquirir Pacote'}
                   </button>
                 </div>
               ))}
@@ -1654,6 +2742,6 @@ export function DashboardPage({
       )}
     </div>
   );
-}
+};
 
-export default DashboardPage;
+export default UserDashboardPage;
