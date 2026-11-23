@@ -11,10 +11,16 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+  if (!turnstileToken) {
+    setError('Por favor, complete a verificação de segurança.');
+    return;
+  }
 
     const authenticatedUser = login(email, password);
     if (!authenticatedUser) {
@@ -24,8 +30,6 @@ export function LoginPage() {
 
     navigate(authenticatedUser.role === 'admin' ? '/admin' : '/painel');
   };
-
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center px-4 py-8">
@@ -98,6 +102,10 @@ export function LoginPage() {
             siteKey="0x4AAAAAAGPSF-eeNU8ONAjq"
             onSuccess={(token) => setTurnstileToken(token)}
             onExpire={() => setTurnstileToken(null)}
+
+            onLoadScript={() => console.log('Script carregado!')}
+            onWidgetLoad={() => console.log('Widget renderizado!')}
+            onError={(error) => console.error('Erro Turnstile:', error)}
           />
 
           <button

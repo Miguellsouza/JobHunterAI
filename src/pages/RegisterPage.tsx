@@ -12,10 +12,16 @@ export function RegisterPage() {
   const [error, setError] = useState('');
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+  if (!turnstileToken) {
+    setError('Por favor, complete a verificação de segurança.');
+    return;
+  }
 
     const ok = register(name, email, password);
     if (!ok) {
@@ -25,8 +31,6 @@ export function RegisterPage() {
 
     navigate('/painel');
   };
-
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center px-4 py-8">
