@@ -108,9 +108,11 @@ export interface QuotaPlan {
   descricao: string;
 }
 
-export interface UserDashboardPageProps {
+export interface DashboardPageProps {
   onRedirectLogin?: () => void;
 }
+
+export type UserDashboardPageProps = DashboardPageProps;
 
 /* ============================================================================
    2. CSS EMBUTIDO (IDENTIDADE VISUAL DARK / BEGE DA REFERÊNCIA)
@@ -902,7 +904,7 @@ const USER_DASHBOARD_CSS = `
 
 const API_BASE_URL =
   (typeof import.meta !== 'undefined' &&
-    (import.meta as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL) ||
+    (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL) ||
   '/api';
 
 class ApiError extends Error {
@@ -1084,10 +1086,10 @@ function generateItemId(): string {
 }
 
 /* ============================================================================
-   4. COMPONENTE PRINCIPAL UNIFICADO
+   4. COMPONENTE PRINCIPAL UNIFICADO (EXPORTADO COMO DashboardPage E UserDashboardPage)
    ============================================================================ */
 
-export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({ onRedirectLogin }) => {
+export const DashboardPage: React.FC<DashboardPageProps> = ({ onRedirectLogin }) => {
   const [activeTab, setActiveTab] = useState<DashboardTab>('vagas');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('dashboard_theme') as 'dark' | 'light') || 'dark';
@@ -2744,4 +2746,5 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({ onRedirect
   );
 };
 
-export default UserDashboardPage;
+export const UserDashboardPage = DashboardPage;
+export default DashboardPage;
