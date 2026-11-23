@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
 import { RobotHeadIcon } from '../components/RobotHeadIcon';
 import { useAuth } from '../context/AuthContext';
+import { Turnstile } from "@marsidev/react-turnstile";
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -23,6 +24,8 @@ export function LoginPage() {
 
     navigate(authenticatedUser.role === 'admin' ? '/admin' : '/painel');
   };
+
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center px-4 py-8">
@@ -91,6 +94,11 @@ export function LoginPage() {
               />
             </div>
           </div>
+          <Turnstile
+            siteKey="0x4AAAAAAGPSF-eeNU8ONAjq"
+            onSuccess={(token) => setTurnstileToken(token)}
+            onExpire={() => setTurnstileToken(null)}
+          />
 
           <button
             type="submit"

@@ -11,7 +11,6 @@ import {
   Calendar,
   Sparkles,
   Check,
-  Shield,
   LogOut,
   Home,
 } from 'lucide-react';
@@ -120,15 +119,6 @@ export function DashboardPage() {
               >
                 <Home className="h-3 w-3" />
                 <span className="hidden sm:inline">Início</span>
-              </Link>
-
-              <Link
-                to="/admin"
-                title="Gerenciar vagas no painel Admin"
-                className="inline-flex items-center gap-1 rounded-full border border-[#334155]/70 bg-[#1e293b]/70 px-2.5 py-1 text-[11.5px] font-medium text-[#cbd5e1] transition-colors hover:border-[#60a5fa]/50 hover:text-white"
-              >
-                <Shield className="h-3 w-3 text-[#60a5fa]" />
-                <span>Admin</span>
               </Link>
 
               {isAgentActive && (

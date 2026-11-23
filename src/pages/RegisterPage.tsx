@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { User, Mail, Lock, AlertCircle, ArrowLeft } from 'lucide-react';
 import { RobotHeadIcon } from '../components/RobotHeadIcon';
 import { useAuth } from '../context/AuthContext';
+import { Turnstile } from "@marsidev/react-turnstile";
 
 export function RegisterPage() {
   const [name, setName] = useState('');
@@ -24,6 +25,8 @@ export function RegisterPage() {
 
     navigate('/painel');
   };
+
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center px-4 py-8">
@@ -110,6 +113,12 @@ export function RegisterPage() {
               />
             </div>
           </div>
+
+          <Turnstile
+            siteKey="0x4AAAAAAGPSF-eeNU8ONAjq"
+            onSuccess={(token) => setTurnstileToken(token)}
+            onExpire={() => setTurnstileToken(null)}
+          />
 
           <button
             type="submit"
