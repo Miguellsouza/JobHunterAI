@@ -1,540 +1,1653 @@
-import React, { useState, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  ArrowUpRight,
-  ArrowDown,
+  AlertTriangle,
+  Bookmark,
+  BookmarkCheck,
+  Bot,
   CheckCircle2,
-  X,
-  RefreshCw,
-  Briefcase,
-  MapPin,
-  Calendar,
-  Sparkles,
-  Check,
-  LogOut,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  ExternalLink,
   Home,
+  Lock,
+  LogOut,
+  Moon,
+  Plus,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Sun,
+  Trash2,
+  Upload,
+  X,
 } from 'lucide-react';
-import { RobotHeadIcon } from '../components/RobotHeadIcon';
-import { useAuth } from '../context/AuthContext';
-import { useJobs, Opportunity } from '../context/JobsContext';
 
-export function DashboardPage() {
-  const { logout } = useAuth();
+export type ThemeMode = 'dark' | 'light';
+export type DashboardTab = 'vagas' | 'usuario' | 'curriculo' | 'configuracoes';
+export type WorkModality = 'todas' | 'remoto' | 'hibrido' | 'presencial';
+export type SeniorityLevel = 'todos' | 'estagio' | 'junior' | 'pleno' | 'senior';
+export type LanguageProficiency =
+  | 'basico'
+  | 'intermediario'
+  | 'avancado'
+  | 'fluente_nativo';
+export type ApplicationStatus =
+  | 'Enviada'
+  | 'Pendente'
+  | 'Em análise'
+  | 'Entrevista'
+  | 'Recusada';
+
+export interface JobFilters {
+  keywords: string;
+  modality: WorkModality;
+  seniority: SeniorityLevel;
+  location: string;
+  onlySaved: boolean;
+}
+
+export interface RecommendedJob {
+  id: string;
+  title: string;
+  company: string;
+  modality: Exclude<WorkModality, 'todas'>;
+  location?: string;
+  foundAt: string;
+  isNew?: boolean;
+  matchPercentage: number;
+  compatibilitySummary: string;
+  requirements: string[];
+  externalUrl: string;
+  isSaved: boolean;
+}
+
+export interface JobApplication {
+  id: string;
+  company: string;
+  roleTitle?: string;
+  appliedAt: string;
+  status: ApplicationStatus;
+}
+
+export interface DailyQuota {
+  usedToday: number;
+  dailyLimit: number;
+}
+
+export interface QuotaPackage {
+  id: 'pack_50' | 'pack_75' | 'pack_100';
+  extraJobs: number;
+  priceBRL: number;
+  formattedPrice: string;
+  label: string;
+}
+
+export interface UserProfile {
+  firstName: string;
+  lastName: string;
+  age: number | '';
+  gender: 'masculino' | 'feminino' | 'outro' | 'prefiro_nao_informar' | '';
+  email: string;
+}
+
+export interface ResumeLanguage {
+  id: string;
+  language: string;
+  level: LanguageProficiency;
+}
+
+export interface ResumeData {
+  fileName: string | null;
+  fileUrl?: string | null;
+  about: string;
+  experiences: string;
+  personalProjects: string;
+  skills: string;
+  languages: ResumeLanguage[];
+  education: string;
+}
+
+export interface DashboardServices {
+  onSearchJobs?: (filters: JobFilters) => Promise<RecommendedJob[]>;
+  onToggleSaveJob?: (jobId: string, nextSavedState: boolean) => Promise<void>;
+  onPurchaseQuotaPackage?: (pkg: QuotaPackage) => Promise<{ newDailyLimit: number }>;
+  onUpdateProfile?: (profile: Omit<UserProfile, 'email'>) => Promise<void>;
+  onUploadResumeFile?: (file: File) => Promise<{ fileName: string; fileUrl?: string }>;
+  onExtractResumeWithAI?: (file?: File) => Promise<Omit<ResumeData, 'fileName' | 'fileUrl'>>;
+  onSaveResumeData?: (data: ResumeData) => Promise<void>;
+  onChangeEmail?: (newEmail: string, currentPassword: string) => Promise<void>;
+  onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
+  onDeleteAccount?: (confirmationText: string) => Promise<void>;
+  onLogout?: () => Promise<void>;
+}
+
+export interface DashboardPageProps {
+  initialProfile?: UserProfile;
+  initialResume?: ResumeData;
+  initialJobs?: RecommendedJob[];
+  initialApplications?: JobApplication[];
+  initialQuota?: DailyQuota;
+  services?: DashboardServices;
+}
+
+const QUOTA_PACKAGES: QuotaPackage[] = [
+  {
+    id: 'pack_50',
+    extraJobs: 50,
+    priceBRL: 19.99,
+    formattedPrice: 'R$ 19,99',
+    label: '+50 vagas por dia',
+  },
+  {
+    id: 'pack_75',
+    extraJobs: 75,
+    priceBRL: 39.9,
+    formattedPrice: 'R$ 39,90',
+    label: '+75 vagas por dia',
+  },
+  {
+    id: 'pack_100',
+    extraJobs: 100,
+    priceBRL: 49.9,
+    formattedPrice: 'R$ 49,90',
+    label: '+100 vagas por dia',
+  },
+];
+
+const EMPTY_PROFILE: UserProfile = {
+  firstName: '',
+  lastName: '',
+  age: '',
+  gender: '',
+  email: '',
+};
+
+const EMPTY_RESUME: ResumeData = {
+  fileName: null,
+  fileUrl: null,
+  about: '',
+  experiences: '',
+  personalProjects: '',
+  skills: '',
+  languages: [],
+  education: '',
+};
+
+const ACCEPTED_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+export function DashboardPage({
+  initialProfile = EMPTY_PROFILE,
+  initialResume = EMPTY_RESUME,
+  initialJobs = [],
+  initialApplications = [],
+  initialQuota = { usedToday: 0, dailyLimit: 50 },
+  services,
+}: DashboardPageProps) {
   const navigate = useNavigate();
-  const {
-    isAgentActive,
-    toggleAgentStatus,
-    foundCount,
-    compatibleCount,
-    applicationsCount,
-    incrementScanStats,
-    opportunities,
-    applications,
-    hasAlreadyApplied,
-    registerApplication,
-  } = useJobs();
 
-  const [isScanning, setIsScanning] = useState<boolean>(false);
-  const [scanFeedback, setScanFeedback] = useState<string | null>(null);
-  const [expandedRequirements, setExpandedRequirements] = useState<Record<string, boolean>>({});
-  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  // Tema Claro / Escuro (padrão escuro conforme Anexo 2)
+  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const isDark = theme === 'dark';
 
-  const historySectionRef = useRef<HTMLElement | null>(null);
+  // Navegação por abas
+  const [activeTab, setActiveTab] = useState<DashboardTab>('vagas');
 
-  const handleToggleAgentStatus = () => {
-    const nextState = toggleAgentStatus();
-    setScanFeedback(
-      nextState
-        ? 'Agente reativado e monitorando novas vagas.'
-        : 'Agente pausado temporariamente.'
-    );
-    setTimeout(() => setScanFeedback(null), 3200);
+  // Estados principais
+  const [profile, setProfile] = useState<UserProfile>(initialProfile);
+  const [resume, setResume] = useState<ResumeData>(initialResume);
+  const [jobs, setJobs] = useState<RecommendedJob[]>(initialJobs);
+  const [applications] = useState<JobApplication[]>(initialApplications);
+  const [quota, setQuota] = useState<DailyQuota>(initialQuota);
+
+  // Estados da aba Vagas
+  const [filters, setFilters] = useState<JobFilters>({
+    keywords: '',
+    modality: 'todas',
+    seniority: 'todos',
+    location: '',
+    onlySaved: false,
+  });
+  const [isSearching, setIsSearching] = useState(false);
+  const [savingJobId, setSavingJobId] = useState<string | null>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [showAllApplications, setShowAllApplications] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Modal de Planos e Ampliação de Limite
+  const [plansModalOpen, setPlansModalOpen] = useState(false);
+  const [limitExceeded, setLimitExceeded] = useState(false);
+  const [purchasingPkgId, setPurchasingPkgId] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  // Estados da aba Usuário (sem foto de perfil; e-mail bloqueado)
+  const [firstName, setFirstName] = useState(initialProfile.firstName);
+  const [lastName, setLastName] = useState(initialProfile.lastName);
+  const [age, setAge] = useState<number | ''>(initialProfile.age);
+  const [gender, setGender] = useState<UserProfile['gender']>(initialProfile.gender);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  // Estados da aba Currículo
+  const [selectedResumeFile, setSelectedResumeFile] = useState<File | undefined>(undefined);
+  const [extractingResume, setExtractingResume] = useState(false);
+  const [savingResume, setSavingResume] = useState(false);
+  const [resumeFeedback, setResumeFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  // Estados da aba Configurações
+  const [newEmail, setNewEmail] = useState(initialProfile.email);
+  const [emailPassword, setEmailPassword] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
+
+  // Tokens visuais alinhados ao Anexo 2 (Dark) e alternativa Light
+  const ui = {
+    page: isDark ? 'bg-[#000000] text-[#f8fafc]' : 'bg-slate-100 text-slate-900',
+    heroCard: isDark
+      ? 'bg-[#0f172a] border-[#1e293b]'
+      : 'bg-white border-slate-200 shadow-sm',
+    metricCard: isDark
+      ? 'bg-[#1e293b]/90 border-[#2d3b52]'
+      : 'bg-slate-50 border-slate-200',
+    card: isDark
+      ? 'bg-[#0a0a0a] border-[#1f242d]'
+      : 'bg-white border-slate-200 shadow-sm',
+    divider: isDark ? 'border-[#1a1e26]' : 'border-slate-200',
+    pillBtn: isDark
+      ? 'bg-[#1e293b] hover:bg-[#293548] border-[#2d3b52] text-slate-200'
+      : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800',
+    primaryBtn:
+      'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white',
+    dangerBtn: isDark
+      ? 'bg-red-950/60 hover:bg-red-950 border-red-900/80 text-red-400'
+      : 'bg-red-50 hover:bg-red-100 border-red-200 text-red-700',
+    emeraldBadge: isDark
+      ? 'bg-emerald-950/90 border-emerald-800/80 text-emerald-400'
+      : 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    amberBadge: isDark
+      ? 'bg-amber-950/90 border-amber-800/80 text-amber-400'
+      : 'bg-amber-50 border-amber-200 text-amber-700',
+    input: isDark
+      ? 'bg-[#0d1117] border-[#262c36] text-slate-100 placeholder:text-slate-500 focus:border-blue-500'
+      : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-600',
+    subText: isDark ? 'text-slate-400' : 'text-slate-600',
+    mutedText: isDark ? 'text-slate-500' : 'text-slate-500',
   };
 
-  const handleSimulateScan = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isAgentActive || isScanning) return;
+  // Métricas superiores
+  const foundCount = jobs.length;
+  const compatibleCount = jobs.filter((job) => job.matchPercentage >= 70).length;
+  const applicationsCount = applications.length;
+  const remainingDailyQuota = Math.max(0, quota.dailyLimit - quota.usedToday);
 
-    setIsScanning(true);
-    setScanFeedback('Executando nova varredura de oportunidades...');
-
-    setTimeout(() => {
-      setIsScanning(false);
-      incrementScanStats();
-      setScanFeedback('Varredura concluída: +1 oportunidade compatível identificada.');
-      setTimeout(() => setScanFeedback(null), 3500);
-    }, 750);
-  };
-
-  const toggleRequirementsPanel = (opportunityId: string) => {
-    setExpandedRequirements((prev) => ({
-      ...prev,
-      [opportunityId]: !prev[opportunityId],
-    }));
-  };
-
-  const handleApply = (opportunity: Opportunity) => {
-    const created = registerApplication(opportunity);
-    if (!created) return;
-
-    setScanFeedback(`Candidatura enviada para ${opportunity.company}.`);
-    setTimeout(() => setScanFeedback(null), 3200);
-  };
-
-  const handleScrollToHistory = () => {
-    historySectionRef.current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
-  };
-
-  const handleLogout = () => {
-    logout();
+  // Handlers de navegação e sessão
+  const handleLogout = async () => {
+    if (services?.onLogout) {
+      await services.onLogout();
+    }
     navigate('/login');
   };
 
+  // Busca de vagas com controle de limite diário (50 vagas/dia)
+  const executeJobSearch = async () => {
+    setSearchError(null);
+
+    if (quota.usedToday >= quota.dailyLimit) {
+      setLimitExceeded(true);
+      setPlansModalOpen(true);
+      return;
+    }
+
+    if (!services?.onSearchJobs) {
+      setSearchError('Serviço de busca de vagas não conectado à API.');
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const results = await services.onSearchJobs(filters);
+      const availableSlots = Math.max(0, quota.dailyLimit - quota.usedToday);
+      const allowedResults = results.slice(0, availableSlots);
+
+      setJobs(allowedResults);
+      const nextUsed = Math.min(quota.dailyLimit, quota.usedToday + allowedResults.length);
+      setQuota((prev) => ({ ...prev, usedToday: nextUsed }));
+
+      if (results.length > availableSlots || nextUsed >= quota.dailyLimit) {
+        setLimitExceeded(true);
+        setPlansModalOpen(true);
+      }
+    } catch (err) {
+      setSearchError(
+        err instanceof Error ? err.message : 'Erro ao buscar vagas recomendadas pela IA.'
+      );
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleFilterSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    void executeJobSearch();
+  };
+
+  const handleToggleSaveJob = async (job: RecommendedJob) => {
+    const nextSaved = !job.isSaved;
+    setSavingJobId(job.id);
+    try {
+      if (services?.onToggleSaveJob) {
+        await services.onToggleSaveJob(job.id, nextSaved);
+      }
+      setJobs((prev) =>
+        prev.map((item) => (item.id === job.id ? { ...item, isSaved: nextSaved } : item))
+      );
+    } finally {
+      setSavingJobId(null);
+    }
+  };
+
+  const handlePurchasePackage = async (pkg: QuotaPackage) => {
+    setPlanError(null);
+    setPurchasingPkgId(pkg.id);
+    try {
+      if (services?.onPurchaseQuotaPackage) {
+        const { newDailyLimit } = await services.onPurchaseQuotaPackage(pkg);
+        setQuota((prev) => ({ ...prev, dailyLimit: newDailyLimit }));
+      } else {
+        setQuota((prev) => ({ ...prev, dailyLimit: prev.dailyLimit + pkg.extraJobs }));
+      }
+      setLimitExceeded(false);
+      setPlansModalOpen(false);
+    } catch (err) {
+      setPlanError(
+        err instanceof Error ? err.message : 'Não foi possível concluir o pagamento do pacote.'
+      );
+    } finally {
+      setPurchasingPkgId(null);
+    }
+  };
+
+  // Handlers Aba Usuário
+  const handleSaveProfile = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setProfileFeedback(null);
+    setSavingProfile(true);
+    try {
+      const payload = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        age,
+        gender,
+      };
+      if (services?.onUpdateProfile) {
+        await services.onUpdateProfile(payload);
+      }
+      setProfile((prev) => ({ ...prev, ...payload }));
+      setProfileFeedback({ type: 'success', text: 'Informações do perfil salvas com sucesso.' });
+    } catch (err) {
+      setProfileFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Erro ao atualizar informações do perfil.',
+      });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Handlers Aba Currículo
+  const handleResumeFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const lower = file.name.toLowerCase();
+    const validExt = lower.endsWith('.pdf') || lower.endsWith('.docx');
+    const validMime = ACCEPTED_MIME_TYPES.includes(file.type) || validExt;
+
+    if (!validMime) {
+      setResumeFeedback({
+        type: 'error',
+        text: 'Formato inválido. Selecione apenas arquivos PDF ou DOCX.',
+      });
+      e.target.value = '';
+      return;
+    }
+
+    setResumeFeedback(null);
+    setSelectedResumeFile(file);
+
+    try {
+      if (services?.onUploadResumeFile) {
+        const uploaded = await services.onUploadResumeFile(file);
+        setResume((prev) => ({
+          ...prev,
+          fileName: uploaded.fileName,
+          fileUrl: uploaded.fileUrl ?? prev.fileUrl,
+        }));
+      } else {
+        setResume((prev) => ({ ...prev, fileName: file.name }));
+      }
+      setResumeFeedback({
+        type: 'success',
+        text: `Documento "${file.name}" carregado com sucesso.`,
+      });
+    } catch (err) {
+      setResumeFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha ao enviar o currículo.',
+      });
+    }
+  };
+
+  const handleExtractResumeAI = async () => {
+    if (!services?.onExtractResumeWithAI) {
+      setResumeFeedback({
+        type: 'error',
+        text: 'Serviço de extração de currículo por IA não conectado.',
+      });
+      return;
+    }
+
+    setResumeFeedback(null);
+    setExtractingResume(true);
+    try {
+      const extracted = await services.onExtractResumeWithAI(selectedResumeFile);
+      setResume((prev) => ({ ...prev, ...extracted }));
+      setResumeFeedback({
+        type: 'success',
+        text: 'Campos preenchidos automaticamente pela inteligência artificial.',
+      });
+    } catch (err) {
+      setResumeFeedback({
+        type: 'error',
+        text:
+          err instanceof Error
+            ? err.message
+            : 'Não foi possível extrair os dados do currículo com IA.',
+      });
+    } finally {
+      setExtractingResume(false);
+    }
+  };
+
+  const handleAddLanguage = () => {
+    setResume((prev) => ({
+      ...prev,
+      languages: [
+        ...prev.languages,
+        { id: `lang_${Date.now()}`, language: '', level: 'intermediario' },
+      ],
+    }));
+  };
+
+  const handleUpdateLanguage = (
+    id: string,
+    field: 'language' | 'level',
+    value: string
+  ) => {
+    setResume((prev) => ({
+      ...prev,
+      languages: prev.languages.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      ),
+    }));
+  };
+
+  const handleRemoveLanguage = (id: string) => {
+    setResume((prev) => ({
+      ...prev,
+      languages: prev.languages.filter((item) => item.id !== id),
+    }));
+  };
+
+  const handleSaveResume = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setResumeFeedback(null);
+    setSavingResume(true);
+    try {
+      if (services?.onSaveResumeData) {
+        await services.onSaveResumeData(resume);
+      }
+      setResumeFeedback({ type: 'success', text: 'Currículo atualizado com sucesso.' });
+    } catch (err) {
+      setResumeFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Erro ao salvar dados do currículo.',
+      });
+    } finally {
+      setSavingResume(false);
+    }
+  };
+
+  // Handlers Aba Configurações
+  const handleChangeEmail = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setEmailFeedback(null);
+    setSavingEmail(true);
+    try {
+      if (services?.onChangeEmail) {
+        await services.onChangeEmail(newEmail.trim(), emailPassword);
+      }
+      setProfile((prev) => ({ ...prev, email: newEmail.trim() }));
+      setEmailPassword('');
+      setEmailFeedback({ type: 'success', text: 'E-mail atualizado com sucesso.' });
+    } catch (err) {
+      setEmailFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Erro ao alterar o e-mail.',
+      });
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const handleChangePassword = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setPasswordFeedback(null);
+    if (newPassword !== confirmPassword) {
+      setPasswordFeedback({
+        type: 'error',
+        text: 'A nova senha e a confirmação não coincidem.',
+      });
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      if (services?.onChangePassword) {
+        await services.onChangePassword(currentPassword, newPassword);
+      }
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordFeedback({ type: 'success', text: 'Senha alterada com sucesso.' });
+    } catch (err) {
+      setPasswordFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Erro ao alterar a senha.',
+      });
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const handleDeleteAccount = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setDeleteFeedback(null);
+    if (deleteConfirmText !== 'EXCLUIR') {
+      setDeleteFeedback('Digite EXCLUIR em letras maiúsculas para confirmar a exclusão.');
+      return;
+    }
+    setDeletingAccount(true);
+    try {
+      if (services?.onDeleteAccount) {
+        await services.onDeleteAccount(deleteConfirmText);
+      }
+      navigate('/');
+    } catch (err) {
+      setDeleteFeedback(
+        err instanceof Error ? err.message : 'Não foi possível excluir a conta.'
+      );
+      setDeletingAccount(false);
+    }
+  };
+
+  const visibleJobs = filters.onlySaved ? jobs.filter((job) => job.isSaved) : jobs;
+  const visibleApplications = showAllApplications ? applications : applications.slice(0, 5);
+
+  const modalityLabel: Record<RecommendedJob['modality'], string> = {
+    remoto: 'Remoto',
+    hibrido: 'Híbrida',
+    presencial: 'Presencial',
+  };
+
+  const tabs: { id: DashboardTab; label: string }[] = [
+    { id: 'vagas', label: 'Vagas' },
+    { id: 'usuario', label: 'Usuário' },
+    { id: 'curriculo', label: 'Currículo' },
+    { id: 'configuracoes', label: 'Configurações' },
+  ];
+
   return (
-    <div className="min-h-screen w-full bg-[#000000] text-[#f8fafc] antialiased selection:bg-[#60a5fa]/30 selection:text-white">
-      <main className="mx-auto w-full max-w-[820px] px-6 py-6">
-        {/* 1. BLOCO SUPERIOR (HEADER CARD) */}
-        <header
-          className="rounded-[16px] border border-[#1e293b] p-5 sm:p-6 shadow-lg"
-          style={{
-            background: 'linear-gradient(180deg, #172033 0%, #111827 100%)',
-          }}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <RobotHeadIcon className="h-[22px] w-[22px] shrink-0" />
-              <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-[#f8fafc]">
-                JobHunter AI
-              </h1>
+    <div className={`min-h-screen px-4 py-7 sm:px-6 transition-colors duration-200 ${ui.page}`}>
+      <div className="mx-auto flex max-w-[920px] flex-col gap-7">
+        {/* Card Superior Principal (Fiel ao Anexo 2) */}
+        <header className={`rounded-2xl border p-5 sm:p-6 transition-colors ${ui.heroCard}`}>
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <Bot className="h-5 w-5 text-blue-500" />
+                <h1 className="text-lg font-bold tracking-tight">JobHunter AI</h1>
+              </div>
+              <p className={`mt-1 text-sm ${ui.subText}`}>
+                Painel pessoal de oportunidades e candidaturas
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Link
-                to="/"
-                title="Ir para o site inicial"
-                className="inline-flex items-center gap-1 rounded-full border border-[#334155]/70 bg-[#1e293b]/70 px-2.5 py-1 text-[11.5px] font-medium text-[#cbd5e1] transition-colors hover:border-[#60a5fa]/50 hover:text-white"
-              >
-                <Home className="h-3 w-3" />
-                <span className="hidden sm:inline">Início</span>
-              </Link>
-
-              {isAgentActive && (
-                <button
-                  type="button"
-                  onClick={handleSimulateScan}
-                  disabled={isScanning}
-                  title="Simular nova varredura"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#334155]/70 bg-[#1e293b]/70 px-2.5 py-1 text-[11.5px] font-medium text-[#cbd5e1] transition-colors hover:border-[#60a5fa]/50 hover:text-white disabled:opacity-60 cursor-pointer"
-                >
-                  <RefreshCw
-                    className={`h-3 w-3 text-[#60a5fa] ${isScanning ? 'animate-spin' : ''}`}
-                  />
-                  <span className="hidden sm:inline">
-                    {isScanning ? 'Varrendo...' : 'Nova varredura'}
-                  </span>
-                </button>
-              )}
-
               <button
                 type="button"
-                onClick={handleToggleAgentStatus}
-                aria-pressed={isAgentActive}
-                title="Clique para alternar o status do agente"
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-all cursor-pointer ${
-                  isAgentActive
-                    ? 'border-[#065f46] bg-[#052e16] text-[#10b981] hover:brightness-110'
-                    : 'border-[#3f3f46] bg-[#18181b] text-[#a1a1aa] hover:border-[#52525b] hover:text-[#e4e4e7]'
-                }`}
+                onClick={() => navigate('/')}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.pillBtn}`}
               >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    isAgentActive ? 'bg-[#10b981] animate-pulse' : 'bg-[#71717a]'
-                  }`}
-                />
-                {isAgentActive ? 'Agente ativo' : 'Agente pausado'}
+                <Home className="h-3.5 w-3.5" />
+                Início
               </button>
 
               <button
                 type="button"
-                onClick={handleLogout}
-                title="Encerrar sessão"
-                className="inline-flex items-center gap-1 rounded-full border border-red-900/50 bg-red-950/40 px-2.5 py-1 text-[11.5px] font-medium text-red-300 transition-colors hover:bg-red-950/70 cursor-pointer"
+                onClick={() => void executeJobSearch()}
+                disabled={isSearching}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.pillBtn}`}
               >
-                <LogOut className="h-3 w-3" />
-                <span className="hidden sm:inline">Sair</span>
+                <RefreshCw className={`h-3.5 w-3.5 ${isSearching ? 'animate-spin' : ''}`} />
+                {isSearching ? 'Varrendo...' : 'Nova varredura'}
               </button>
-            </div>
-          </div>
 
-          <p className="mt-2.5 text-[13.5px] text-[#cbd5e1]">
-            Painel pessoal de oportunidades e candidaturas
-          </p>
-
-          {scanFeedback && (
-            <div
-              role="status"
-              className="mt-3 flex items-center justify-between rounded-[10px] border border-[#1e293b] bg-[#0f172a]/90 px-3 py-2 text-[12px] text-[#cbd5e1]"
-            >
-              <span className="flex items-center gap-2">
-                <Sparkles className="h-3.5 w-3.5 text-[#60a5fa] shrink-0" />
-                {scanFeedback}
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${ui.emeraldBadge}`}
+                title="Cota diária restante de busca de vagas"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Agente ativo · {remainingDailyQuota}/{quota.dailyLimit} vagas
               </span>
+
               <button
                 type="button"
-                onClick={() => setScanFeedback(null)}
-                className="text-[#94a3b8] hover:text-white cursor-pointer"
-                aria-label="Fechar aviso"
+                onClick={() => {
+                  setLimitExceeded(false);
+                  setPlansModalOpen(true);
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.primaryBtn}`}
               >
-                <X className="h-3.5 w-3.5" />
+                <CreditCard className="h-3.5 w-3.5" />
+                Planos
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.pillBtn}`}
+                aria-label="Alternar modo claro e escuro"
+              >
+                {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                {isDark ? 'Modo claro' : 'Modo escuro'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${ui.dangerBtn}`}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sair
               </button>
             </div>
-          )}
+          </div>
 
-          {/* Grid de KPIs */}
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-[12px] bg-[#253349] px-4 py-3.5 transition-transform duration-150 hover:bg-[#293850]">
-              <div className="text-[24px] font-bold leading-tight text-white">
-                {foundCount}
-              </div>
-              <div className="mt-1 text-[13px] text-[#cbd5e1]">Encontradas</div>
+          {/* Métricas internas (Anexo 2) */}
+          <div className="mt-5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+            <div className={`rounded-xl border px-5 py-4 ${ui.metricCard}`}>
+              <div className="text-2xl font-bold">{foundCount}</div>
+              <div className={`mt-1 text-xs ${ui.subText}`}>Encontradas</div>
             </div>
-
-            <div className="rounded-[12px] bg-[#253349] px-4 py-3.5 transition-transform duration-150 hover:bg-[#293850]">
-              <div className="text-[24px] font-bold leading-tight text-white">
-                {compatibleCount}
-              </div>
-              <div className="mt-1 text-[13px] text-[#cbd5e1]">Compatíveis</div>
+            <div className={`rounded-xl border px-5 py-4 ${ui.metricCard}`}>
+              <div className="text-2xl font-bold">{compatibleCount}</div>
+              <div className={`mt-1 text-xs ${ui.subText}`}>Compatíveis</div>
             </div>
-
-            <div className="rounded-[12px] bg-[#253349] px-4 py-3.5 transition-transform duration-150 hover:bg-[#293850]">
-              <div className="text-[24px] font-bold leading-tight text-white">
-                {applicationsCount}
-              </div>
-              <div className="mt-1 text-[13px] text-[#cbd5e1]">Candidaturas</div>
+            <div className={`rounded-xl border px-5 py-4 ${ui.metricCard}`}>
+              <div className="text-2xl font-bold">{applicationsCount}</div>
+              <div className={`mt-1 text-xs ${ui.subText}`}>Candidaturas</div>
             </div>
           </div>
+
+          {/* Abas de navegação do Dashboard */}
+          <nav
+            aria-label="Seções do painel"
+            className={`mt-5 flex flex-wrap gap-2 border-t pt-4 ${ui.divider}`}
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                    isActive
+                      ? isDark
+                        ? 'bg-[#1e293b] text-white border border-[#2d3b52]'
+                        : 'bg-slate-900 text-white border border-slate-900'
+                      : `${ui.subText} hover:opacity-90`
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
         </header>
 
-        {/* 2. OPORTUNIDADES RECOMENDADAS */}
-        <section aria-labelledby="recommended-heading" className="mt-7">
-          <h2
-            id="recommended-heading"
-            className="mb-3.5 text-[16px] font-medium text-[#f4f4f5]"
-          >
-            Oportunidades recomendadas
-          </h2>
+        {/* ==================== ABA 1: VAGAS ==================== */}
+        {activeTab === 'vagas' && (
+          <main className="flex flex-col gap-7">
+            {/* Filtro de Preferências de Vagas (independente do currículo) */}
+            <section className={`rounded-xl border p-5 ${ui.card}`}>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-semibold">Preferências e filtro de vagas</h2>
+                <span className={`text-xs ${ui.mutedText}`}>
+                  Limite diário: {quota.usedToday} de {quota.dailyLimit} vagas procuradas hoje
+                </span>
+              </div>
 
-          <div className="space-y-3.5">
-            {opportunities.map((opportunity) => {
-              const isExpanded = !!expandedRequirements[opportunity.id];
-              const isApplied = hasAlreadyApplied(opportunity.company);
+              {searchError && (
+                <div className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${ui.dangerBtn}`}>
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{searchError}</span>
+                </div>
+              )}
 
-              return (
-                <article
-                  key={opportunity.id}
-                  className="rounded-[12px] border border-[#27272a] bg-[#09090b] p-[20px] transition-colors hover:border-[#3f3f46]"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h3 className="text-[15.5px] font-medium text-[#f4f4f5]">
-                      {opportunity.title}
-                    </h3>
-                    <span className="inline-flex items-center rounded-full border border-[#065f46]/70 bg-[#052e16] px-2.5 py-0.5 text-[12px] font-medium text-[#10b981]">
-                      {opportunity.matchPercentage}% aderência
-                    </span>
+              <form onSubmit={handleFilterSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="job-keywords" className={`text-xs font-medium ${ui.subText}`}>
+                    Cargo ou palavras-chave desejadas
+                  </label>
+                  <input
+                    id="job-keywords"
+                    type="text"
+                    placeholder="Ex.: Desenvolvedor Python, Estágio IA..."
+                    value={filters.keywords}
+                    onChange={(e) => setFilters({ ...filters, keywords: e.target.value })}
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="job-modality" className={`text-xs font-medium ${ui.subText}`}>
+                    Modalidade desejada (independente do currículo)
+                  </label>
+                  <select
+                    id="job-modality"
+                    value={filters.modality}
+                    onChange={(e) =>
+                      setFilters({ ...filters, modality: e.target.value as WorkModality })
+                    }
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
+                  >
+                    <option value="todas">Todas (Remoto, Híbrida e Presencial)</option>
+                    <option value="remoto">Remoto</option>
+                    <option value="hibrido">Híbrida</option>
+                    <option value="presencial">Presencial</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="job-seniority" className={`text-xs font-medium ${ui.subText}`}>
+                    Nível da vaga
+                  </label>
+                  <select
+                    id="job-seniority"
+                    value={filters.seniority}
+                    onChange={(e) =>
+                      setFilters({ ...filters, seniority: e.target.value as SeniorityLevel })
+                    }
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
+                  >
+                    <option value="todos">Todos os níveis</option>
+                    <option value="estagio">Estágio</option>
+                    <option value="junior">Júnior</option>
+                    <option value="pleno">Pleno</option>
+                    <option value="senior">Sênior</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="job-location" className={`text-xs font-medium ${ui.subText}`}>
+                    Cidade / Estado (para híbrido ou presencial)
+                  </label>
+                  <input
+                    id="job-location"
+                    type="text"
+                    placeholder="Ex.: Salvador - BA, São Paulo - SP..."
+                    value={filters.location}
+                    onChange={(e) => setFilters({ ...filters, location: e.target.value })}
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${ui.input}`}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2 pt-1">
+                  <label className={`inline-flex items-center gap-2 text-xs cursor-pointer ${ui.subText}`}>
+                    <input
+                      type="checkbox"
+                      checked={filters.onlySaved}
+                      onChange={(e) => setFilters({ ...filters, onlySaved: e.target.checked })}
+                      className="rounded border-slate-600"
+                    />
+                    Exibir apenas vagas salvas
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLimitExceeded(false);
+                        setPlansModalOpen(true);
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${ui.pillBtn}`}
+                    >
+                      Ampliar limite diário
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={isSearching}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      {isSearching ? 'Buscando vagas...' : 'Procurar vagas com IA'}
+                    </button>
                   </div>
+                </div>
+              </form>
+            </section>
 
-                  <p className="mt-1.5 text-[13.5px] text-[#d4d4d8]">
-                    {opportunity.company} · {opportunity.location}
-                  </p>
+            {/* Oportunidades Recomendadas pela IA (Anexos 1 e 2) */}
+            <section>
+              <div className="mb-3.5 flex items-center justify-between">
+                <h2 className="text-base font-semibold">Oportunidades recomendadas</h2>
+                <span className={`text-xs ${ui.mutedText}`}>
+                  {visibleJobs.length} vaga(s) exibida(s)
+                </span>
+              </div>
 
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px]">
-                    <span className="text-[#a1a1aa]">
-                      Encontrada em {opportunity.foundDate}
-                    </span>
-                    {opportunity.isNew && (
-                      <span className="font-medium text-[#10b981]">
-                        Nova oportunidade
-                      </span>
-                    )}
-                  </div>
+              {visibleJobs.length === 0 ? (
+                <div className={`rounded-xl border p-6 text-sm ${ui.card} ${ui.subText}`}>
+                  Nenhuma vaga selecionada pela IA encontrada para os critérios atuais. Utilize o
+                  filtro acima ou clique em <strong>Nova varredura</strong> para buscar
+                  oportunidades.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3.5">
+                  {visibleJobs.map((job) => {
+                    const isExpanded = expandedJobId === job.id;
+                    return (
+                      <article key={job.id} className={`rounded-xl border p-5 ${ui.card}`}>
+                        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                          <div>
+                            <h3 className="text-base font-semibold">{job.title}</h3>
+                            <p className={`mt-1 text-xs sm:text-sm ${ui.subText}`}>
+                              {job.company} · {modalityLabel[job.modality]}
+                              {job.location ? ` (${job.location})` : ''}
+                            </p>
+                          </div>
 
-                  <hr className="my-3.5 border-0 border-t border-[#1f1f23]" />
-
-                  {opportunity.hasExpandableRequirements && (
-                    <>
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
-                        <span className="text-[#e4e4e7]">
-                          {opportunity.compatibilityNote}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleRequirementsPanel(opportunity.id)}
-                          aria-expanded={isExpanded}
-                          className="font-medium text-[#e4e4e7] transition-colors hover:text-white underline-offset-4 hover:underline cursor-pointer"
-                        >
-                          {isExpanded ? 'Ocultar requisitos' : 'Ver requisitos'}
-                        </button>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="mt-3.5 rounded-[10px] border border-[#27272a] bg-[#111114] p-3.5">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[12px] font-medium text-[#a1a1aa]">
-                                Requisitos técnicos mapeados:
-                              </p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {opportunity.requirements.map((skill) => (
-                                  <span
-                                    key={skill}
-                                    className="inline-flex items-center gap-1 rounded-md border border-[#27272a] bg-[#18181b] px-2.5 py-1 text-[12px] font-medium text-[#e4e4e7]"
-                                  >
-                                    <Check className="h-3 w-3 text-[#10b981]" />
-                                    {skill}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full border px-3 py-1 text-xs font-semibold ${ui.emeraldBadge}`}
+                            >
+                              {job.matchPercentage}% aderência
+                            </span>
 
                             <button
                               type="button"
-                              onClick={() => handleApply(opportunity)}
-                              disabled={isApplied}
-                              className={`inline-flex items-center gap-1.5 rounded-[8px] px-3.5 py-2 text-[12.5px] font-medium transition-all cursor-pointer ${
-                                isApplied
-                                  ? 'border border-[#065f46] bg-[#052e16] text-[#10b981] cursor-default'
-                                  : 'bg-[#f4f4f5] text-[#09090b] hover:bg-white'
+                              onClick={() => void handleToggleSaveJob(job)}
+                              disabled={savingJobId === job.id}
+                              aria-pressed={job.isSaved}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                                job.isSaved ? ui.primaryBtn : ui.pillBtn
                               }`}
                             >
-                              {isApplied ? (
+                              {job.isSaved ? (
                                 <>
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  Candidatura registrada
+                                  <BookmarkCheck className="h-3.5 w-3.5" />
+                                  Salva
                                 </>
                               ) : (
-                                'Registrar candidatura'
+                                <>
+                                  <Bookmark className="h-3.5 w-3.5" />
+                                  Salvar
+                                </>
                               )}
                             </button>
                           </div>
                         </div>
-                      )}
-                    </>
-                  )}
 
-                  <div className={opportunity.hasExpandableRequirements ? 'mt-3' : ''}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedOpportunity(opportunity)}
-                      className="inline-flex items-center gap-1 text-[13px] text-[#d4d4d8] transition-colors hover:text-white cursor-pointer"
-                    >
-                      <span>Link: visualizar oportunidade</span>
-                      <ArrowUpRight className="h-3.5 w-3.5 text-[#a1a1aa]" />
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
+                        <div className="mt-2.5 flex items-center justify-between text-xs">
+                          <span className={ui.mutedText}>Encontrada em {job.foundAt}</span>
+                          {job.isNew && (
+                            <span className="font-medium text-emerald-400">Nova oportunidade</span>
+                          )}
+                        </div>
 
-        {/* 3. HISTÓRICO DE CANDIDATURAS */}
-        <section
-          ref={historySectionRef}
-          aria-labelledby="history-heading"
-          className="mt-7 scroll-mt-6"
-        >
-          <h2
-            id="history-heading"
-            className="mb-3 text-[16px] font-medium text-[#f4f4f5]"
-          >
-            Histórico de candidaturas
-          </h2>
+                        <hr className={`my-3.5 border-t ${ui.divider}`} />
 
-          <div className="w-full overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-[#1f1f23] text-[13px] font-medium text-[#e4e4e7]">
-                  <th scope="col" className="w-[42%] py-2.5 pr-4 font-medium">
-                    Empresa
-                  </th>
-                  <th scope="col" className="w-[38%] py-2.5 pr-4 font-medium">
-                    Inscrição
-                  </th>
-                  <th scope="col" className="w-[20%] py-2.5 text-right font-medium">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {applications.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="border-b border-[#1f1f23] text-[13.5px] transition-colors hover:bg-[#09090b]"
-                  >
-                    <td className="py-3 pr-4 text-[#e4e4e7]">{item.company}</td>
-                    <td className="py-3 pr-4 text-[#e4e4e7]">{item.appliedDate}</td>
-                    <td className="py-3 text-right">
-                      {item.status === 'Enviada' ? (
-                        <span className="inline-flex items-center rounded-full border border-[#065f46]/70 bg-[#052e16] px-2.5 py-0.5 text-[12px] font-medium text-[#10b981]">
-                          Enviada
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-[#7c2d12]/70 bg-[#431407] px-2.5 py-0.5 text-[12px] font-medium text-[#f97316]">
-                          Pendente
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                        <div className="flex items-center justify-between gap-3 text-xs sm:text-sm">
+                          <span className={ui.subText}>{job.compatibilitySummary}</span>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
+                            className="font-medium hover:underline cursor-pointer shrink-0"
+                          >
+                            {isExpanded ? 'Ocultar requisitos' : 'Ver requisitos'}
+                          </button>
+                        </div>
 
-        {/* 4. RODAPÉ */}
-        <footer className="mt-4 pb-2">
-          <div className="flex justify-center">
-            <button
-              type="button"
-              onClick={handleScrollToHistory}
-              aria-label="Rolar até o histórico de candidaturas"
-              title="Ir para o histórico de candidaturas"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-[#27272a] bg-[#09090b] text-[#a1a1aa] transition-colors hover:border-[#3f3f46] hover:text-white cursor-pointer"
-            >
-              <ArrowDown className="h-3.5 w-3.5" />
-            </button>
-          </div>
+                        {isExpanded && job.requirements.length > 0 && (
+                          <ul
+                            className={`mt-3 list-disc space-y-1 rounded-lg border p-3.5 pl-7 text-xs ${ui.metricCard} ${ui.subText}`}
+                          >
+                            {job.requirements.map((req, index) => (
+                              <li key={index}>{req}</li>
+                            ))}
+                          </ul>
+                        )}
 
-          <p className="mt-2 text-[12px] text-[#a1a1aa]">
-            Interface conceitual com dados fictícios.
-          </p>
-        </footer>
-      </main>
-
-      {/* 5. MODAL DE DETALHES */}
-      {selectedOpportunity && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-opportunity-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs"
-          onClick={() => setSelectedOpportunity(null)}
-        >
-          <div
-            className="w-full max-w-[540px] rounded-[16px] border border-[#27272a] bg-[#09090b] p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full border border-[#065f46]/70 bg-[#052e16] px-2.5 py-0.5 text-[12px] font-medium text-[#10b981]">
-                    {selectedOpportunity.matchPercentage}% aderência
-                  </span>
-                  <span className="text-[12px] text-[#10b981]">Nova oportunidade</span>
+                        <div className="mt-4 flex items-center justify-between">
+                          <a
+                            href={job.externalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+                          >
+                            Link: visualizar oportunidade
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-                <h3
-                  id="modal-opportunity-title"
-                  className="mt-2.5 text-[18px] font-semibold text-[#f8fafc]"
+              )}
+            </section>
+
+            {/* Histórico de Candidaturas (Anexos 1 e 2) */}
+            <section>
+              <h2 className="mb-3.5 text-base font-semibold">Histórico de candidaturas</h2>
+
+              <div className={`rounded-xl border p-5 ${ui.card}`}>
+                {applications.length === 0 ? (
+                  <p className={`text-sm ${ui.subText}`}>
+                    Nenhuma candidatura registrada até o momento.
+                  </p>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className={`border-b text-left text-xs ${ui.divider} ${ui.subText}`}>
+                            <th className="py-2.5 font-medium">Empresa</th>
+                            <th className="py-2.5 font-medium">Inscrição</th>
+                            <th className="py-2.5 text-right font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleApplications.map((app) => {
+                            const isPositive =
+                              app.status === 'Enviada' || app.status === 'Entrevista';
+                            return (
+                              <tr key={app.id} className={`border-b ${ui.divider}`}>
+                                <td className="py-3.5 font-medium">
+                                  {app.company}
+                                  {app.roleTitle ? (
+                                    <span className={`ml-2 text-xs font-normal ${ui.subText}`}>
+                                      · {app.roleTitle}
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className={`py-3.5 text-xs sm:text-sm ${ui.subText}`}>
+                                  {app.appliedAt}
+                                </td>
+                                <td className="py-3.5 text-right">
+                                  <span
+                                    className={`inline-block rounded-full border px-3 py-0.5 text-xs font-medium ${
+                                      isPositive ? ui.emeraldBadge : ui.amberBadge
+                                    }`}
+                                  >
+                                    {app.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {applications.length > 5 && (
+                      <div className="mt-4 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setShowAllApplications((prev) => !prev)}
+                          aria-label={
+                            showAllApplications ? 'Recolher histórico' : 'Expandir histórico'
+                          }
+                          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors cursor-pointer ${ui.pillBtn}`}
+                        >
+                          {showAllApplications ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </section>
+          </main>
+        )}
+
+        {/* ==================== ABA 2: USUÁRIO (SEM FOTO DE PERFIL) ==================== */}
+        {activeTab === 'usuario' && (
+          <main className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
+            <div className="mb-5">
+              <h2 className="text-base font-semibold">Informações do Usuário</h2>
+              <p className={`mt-1 text-xs sm:text-sm ${ui.subText}`}>
+                Dados cadastrais da sua conta. O e-mail permanece bloqueado nesta aba por segurança.
+              </p>
+            </div>
+
+            {profileFeedback && (
+              <div
+                className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${
+                  profileFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
+                }`}
+              >
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{profileFeedback.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="user-first-name" className={`text-xs font-medium ${ui.subText}`}>
+                  Nome
+                </label>
+                <input
+                  id="user-first-name"
+                  type="text"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="user-last-name" className={`text-xs font-medium ${ui.subText}`}>
+                  Sobrenome
+                </label>
+                <input
+                  id="user-last-name"
+                  type="text"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="user-age" className={`text-xs font-medium ${ui.subText}`}>
+                  Idade
+                </label>
+                <input
+                  id="user-age"
+                  type="number"
+                  min={14}
+                  max={120}
+                  required
+                  value={age}
+                  onChange={(e) =>
+                    setAge(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="user-gender" className={`text-xs font-medium ${ui.subText}`}>
+                  Sexo
+                </label>
+                <select
+                  id="user-gender"
+                  required
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value as UserProfile['gender'])}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
                 >
-                  {selectedOpportunity.title}
-                </h3>
-                <p className="mt-1 text-[13.5px] text-[#d4d4d8]">
-                  {selectedOpportunity.company} · {selectedOpportunity.location}
+                  <option value="">Selecione</option>
+                  <option value="masculino">Masculino</option>
+                  <option value="feminino">Feminino</option>
+                  <option value="outro">Outro</option>
+                  <option value="prefiro_nao_informar">Prefiro não informar</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label
+                  htmlFor="user-locked-email"
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium ${ui.subText}`}
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  E-mail (bloqueado para alteração nesta aba)
+                </label>
+                <input
+                  id="user-locked-email"
+                  type="email"
+                  value={profile.email}
+                  disabled
+                  readOnly
+                  className={`rounded-lg border px-3 py-2 text-sm opacity-65 cursor-not-allowed ${ui.input}`}
+                />
+                <p className={`text-xs ${ui.mutedText}`}>
+                  Para alterar o seu endereço de e-mail, utilize a aba{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('configuracoes')}
+                    className="text-blue-500 underline cursor-pointer"
+                  >
+                    Configurações
+                  </button>
+                  .
+                </p>
+              </div>
+
+              <div className="flex justify-end sm:col-span-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingProfile}
+                  className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+                >
+                  {savingProfile ? 'Salvando...' : 'Salvar informações'}
+                </button>
+              </div>
+            </form>
+          </main>
+        )}
+
+        {/* ==================== ABA 3: CURRÍCULO ==================== */}
+        {activeTab === 'curriculo' && (
+          <main className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
+            <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="text-base font-semibold">Currículo</h2>
+                <p className={`mt-1 text-xs sm:text-sm ${ui.subText}`}>
+                  Envie seu currículo em PDF ou DOCX e preencha os campos manualmente ou com IA.
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => setSelectedOpportunity(null)}
-                aria-label="Fechar detalhes da oportunidade"
-                className="rounded-lg border border-[#27272a] bg-[#111114] p-1.5 text-[#a1a1aa] transition-colors hover:border-[#3f3f46] hover:text-white cursor-pointer"
+                onClick={() => void handleExtractResumeAI()}
+                disabled={extractingResume || (!selectedResumeFile && !resume.fileName)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {extractingResume ? 'Preenchendo com IA...' : 'Preencher campos com IA'}
+              </button>
+            </div>
+
+            {resumeFeedback && (
+              <div
+                className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${
+                  resumeFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
+                }`}
+              >
+                <span>{resumeFeedback.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveResume} className="flex flex-col gap-4">
+              {/* Upload PDF ou DOCX */}
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="resume-doc-input"
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium ${ui.subText}`}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Arquivo do currículo (somente PDF ou DOCX)
+                </label>
+                <input
+                  id="resume-doc-input"
+                  type="file"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={(e) => void handleResumeFileChange(e)}
+                  className={`rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1 file:text-xs file:font-medium file:text-white hover:file:bg-blue-500 ${ui.input}`}
+                />
+                {resume.fileName && (
+                  <span className={`text-xs ${ui.mutedText}`}>
+                    Documento anexado: <strong>{resume.fileName}</strong>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="resume-about" className={`text-xs font-medium ${ui.subText}`}>
+                  Sobre
+                </label>
+                <textarea
+                  id="resume-about"
+                  rows={3}
+                  placeholder="Resumo profissional e objetivos..."
+                  value={resume.about}
+                  onChange={(e) => setResume({ ...resume, about: e.target.value })}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="resume-experiences" className={`text-xs font-medium ${ui.subText}`}>
+                  Experiências
+                </label>
+                <textarea
+                  id="resume-experiences"
+                  rows={4}
+                  placeholder="Histórico profissional, cargos, empresas e responsabilidades..."
+                  value={resume.experiences}
+                  onChange={(e) => setResume({ ...resume, experiences: e.target.value })}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="resume-projects" className={`text-xs font-medium ${ui.subText}`}>
+                  Projetos pessoais
+                </label>
+                <textarea
+                  id="resume-projects"
+                  rows={3}
+                  placeholder="Projetos desenvolvidos, tecnologias utilizadas e resultados..."
+                  value={resume.personalProjects}
+                  onChange={(e) => setResume({ ...resume, personalProjects: e.target.value })}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="resume-skills" className={`text-xs font-medium ${ui.subText}`}>
+                  Habilidades
+                </label>
+                <textarea
+                  id="resume-skills"
+                  rows={3}
+                  placeholder="Linguagens, frameworks, ferramentas e competências..."
+                  value={resume.skills}
+                  onChange={(e) => setResume({ ...resume, skills: e.target.value })}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              {/* Idiomas e seu nível */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-medium ${ui.subText}`}>
+                    Idiomas e seu nível
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddLanguage}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium cursor-pointer ${ui.pillBtn}`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Adicionar idioma
+                  </button>
+                </div>
+
+                {resume.languages.length === 0 ? (
+                  <p className={`text-xs ${ui.mutedText}`}>Nenhum idioma adicionado.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {resume.languages.map((item) => (
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px_auto]"
+                      >
+                        <input
+                          type="text"
+                          placeholder="Ex.: Inglês, Espanhol..."
+                          value={item.language}
+                          onChange={(e) =>
+                            handleUpdateLanguage(item.id, 'language', e.target.value)
+                          }
+                          className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                        />
+                        <select
+                          value={item.level}
+                          onChange={(e) =>
+                            handleUpdateLanguage(
+                              item.id,
+                              'level',
+                              e.target.value as LanguageProficiency
+                            )
+                          }
+                          className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                        >
+                          <option value="basico">Básico</option>
+                          <option value="intermediario">Intermediário</option>
+                          <option value="avancado">Avançado</option>
+                          <option value="fluente_nativo">Fluente / Nativo</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLanguage(item.id)}
+                          aria-label="Remover idioma"
+                          className={`inline-flex items-center justify-center rounded-lg border px-3 py-2 text-xs font-medium cursor-pointer ${ui.dangerBtn}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="resume-education" className={`text-xs font-medium ${ui.subText}`}>
+                  Formações (faculdades, cursos e certificados)
+                </label>
+                <textarea
+                  id="resume-education"
+                  rows={3}
+                  placeholder="Graduação, cursos complementares, certificações e instituições..."
+                  value={resume.education}
+                  onChange={(e) => setResume({ ...resume, education: e.target.value })}
+                  className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                />
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={savingResume}
+                  className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+                >
+                  {savingResume ? 'Salvando currículo...' : 'Salvar currículo'}
+                </button>
+              </div>
+            </form>
+          </main>
+        )}
+
+        {/* ==================== ABA 4: CONFIGURAÇÕES ==================== */}
+        {activeTab === 'configuracoes' && (
+          <main className="flex flex-col gap-5">
+            {/* Alterar E-mail */}
+            <section className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
+              <h2 className="mb-4 text-base font-semibold">Alterar E-mail</h2>
+
+              {emailFeedback && (
+                <div
+                  className={`mb-4 rounded-lg border p-3 text-xs ${
+                    emailFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
+                  }`}
+                >
+                  {emailFeedback.text}
+                </div>
+              )}
+
+              <form onSubmit={handleChangeEmail} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cfg-new-email" className={`text-xs font-medium ${ui.subText}`}>
+                    Novo e-mail
+                  </label>
+                  <input
+                    id="cfg-new-email"
+                    type="email"
+                    required
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cfg-email-pass" className={`text-xs font-medium ${ui.subText}`}>
+                    Senha atual para confirmação
+                  </label>
+                  <input
+                    id="cfg-email-pass"
+                    type="password"
+                    required
+                    value={emailPassword}
+                    onChange={(e) => setEmailPassword(e.target.value)}
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  />
+                </div>
+
+                <div className="flex justify-end sm:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={savingEmail}
+                    className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+                  >
+                    {savingEmail ? 'Atualizando...' : 'Atualizar e-mail'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            {/* Alterar Senha */}
+            <section className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
+              <h2 className="mb-4 text-base font-semibold">Alterar Senha</h2>
+
+              {passwordFeedback && (
+                <div
+                  className={`mb-4 rounded-lg border p-3 text-xs ${
+                    passwordFeedback.type === 'success' ? ui.emeraldBadge : ui.dangerBtn
+                  }`}
+                >
+                  {passwordFeedback.text}
+                </div>
+              )}
+
+              <form onSubmit={handleChangePassword} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5 sm:col-span-2">
+                  <label htmlFor="cfg-curr-pass" className={`text-xs font-medium ${ui.subText}`}>
+                    Senha atual
+                  </label>
+                  <input
+                    id="cfg-curr-pass"
+                    type="password"
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cfg-new-pass" className={`text-xs font-medium ${ui.subText}`}>
+                    Nova senha
+                  </label>
+                  <input
+                    id="cfg-new-pass"
+                    type="password"
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="cfg-conf-pass" className={`text-xs font-medium ${ui.subText}`}>
+                    Confirmar nova senha
+                  </label>
+                  <input
+                    id="cfg-conf-pass"
+                    type="password"
+                    required
+                    minLength={6}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  />
+                </div>
+
+                <div className="flex justify-end sm:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={savingPassword}
+                    className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+                  >
+                    {savingPassword ? 'Alterando...' : 'Alterar senha'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            {/* Logout e Exclusão da Conta */}
+            <section className={`rounded-xl border p-5 sm:p-6 ${ui.card}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold">Sessão e Exclusão de Conta</h2>
+                  <p className={`mt-1 text-xs ${ui.subText}`}>
+                    Encerre sua sessão atual ou exclua sua conta permanentemente.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${ui.dangerBtn}`}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Fazer logout
+                </button>
+              </div>
+
+              <hr className={`my-4 border-t ${ui.divider}`} />
+
+              {deleteFeedback && (
+                <div className={`mb-4 rounded-lg border p-3 text-xs ${ui.dangerBtn}`}>
+                  {deleteFeedback}
+                </div>
+              )}
+
+              <form onSubmit={handleDeleteAccount} className="flex flex-col gap-3">
+                <label htmlFor="cfg-delete-confirm" className={`text-xs font-medium ${ui.subText}`}>
+                  Para excluir permanentemente sua conta e todos os seus dados, digite{' '}
+                  <strong>EXCLUIR</strong>:
+                </label>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    id="cfg-delete-confirm"
+                    type="text"
+                    placeholder="EXCLUIR"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm outline-none ${ui.input}`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={deletingAccount}
+                    className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.dangerBtn}`}
+                  >
+                    {deletingAccount ? 'Excluindo...' : 'Excluir conta'}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </main>
+        )}
+      </div>
+
+      {/* ==================== MODAL DE PLANOS E PACOTES DE VAGAS ==================== */}
+      {plansModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="plans-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+        >
+          <div className={`w-full max-w-2xl rounded-2xl border p-6 shadow-2xl ${ui.heroCard}`}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="plans-modal-title" className="text-base font-semibold">
+                  Planos e Ampliação de Limite Diário
+                </h2>
+                <p className={`mt-1 text-xs ${ui.subText}`}>
+                  Consumo atual: {quota.usedToday} de {quota.dailyLimit} vagas procuradas hoje.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPlansModalOpen(false)}
+                aria-label="Fechar modal de planos"
+                className={`rounded-lg border p-1.5 cursor-pointer ${ui.pillBtn}`}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-2.5 rounded-[12px] border border-[#1f1f23] bg-[#111114] p-3.5 text-[12.5px] text-[#cbd5e1] sm:grid-cols-3">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-3.5 w-3.5 text-[#60a5fa] shrink-0" />
-                <span>{selectedOpportunity.modalityDetails}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Briefcase className="h-3.5 w-3.5 text-[#60a5fa] shrink-0" />
-                <span>{selectedOpportunity.compensation}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-3.5 w-3.5 text-[#60a5fa] shrink-0" />
-                <span>Encontrada em {selectedOpportunity.foundDate}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3 text-[13.5px]">
-              <div>
-                <h4 className="text-[12.5px] font-medium uppercase tracking-wider text-[#a1a1aa]">
-                  Resumo da oportunidade
-                </h4>
-                <p className="mt-1 leading-relaxed text-[#e4e4e7]">
-                  {selectedOpportunity.summary}
-                </p>
-              </div>
-
-              <div>
-                <h4 className="text-[12.5px] font-medium uppercase tracking-wider text-[#a1a1aa]">
-                  Principais atividades
-                </h4>
-                <ul className="mt-1.5 space-y-1.5 text-[#d4d4d8]">
-                  {selectedOpportunity.activities.map((activity, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#60a5fa] shrink-0" />
-                      <span>{activity}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="text-[12.5px] font-medium uppercase tracking-wider text-[#a1a1aa]">
-                  Competências identificadas
-                </h4>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {selectedOpportunity.requirements.map((req) => (
-                    <span
-                      key={req}
-                      className="rounded-md border border-[#27272a] bg-[#18181b] px-2.5 py-1 text-[12px] text-[#e4e4e7]"
-                    >
-                      {req}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center justify-end gap-2.5 border-t border-[#1f1f23] pt-4">
-              <button
-                type="button"
-                onClick={() => setSelectedOpportunity(null)}
-                className="rounded-[8px] border border-[#27272a] bg-transparent px-4 py-2 text-[13px] font-medium text-[#d4d4d8] transition-colors hover:border-[#3f3f46] hover:text-white cursor-pointer"
-              >
-                Fechar
-              </button>
-
-              {hasAlreadyApplied(selectedOpportunity.company) ? (
-                <span className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#065f46] bg-[#052e16] px-4 py-2 text-[13px] font-medium text-[#10b981]">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Candidatura já registrada
+            {limitExceeded && (
+              <div className={`mt-4 flex items-center gap-2 rounded-lg border p-3 text-xs ${ui.amberBadge}`}>
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>
+                  Você atingiu o limite diário de {quota.dailyLimit} vagas. Para continuar
+                  procurando vagas hoje, escolha um dos pacotes pagos abaixo.
                 </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleApply(selectedOpportunity)}
-                  className="inline-flex items-center gap-1.5 rounded-[8px] bg-[#f8fafc] px-4 py-2 text-[13px] font-semibold text-[#09090b] transition-colors hover:bg-white cursor-pointer"
+              </div>
+            )}
+
+            {planError && (
+              <div className={`mt-4 rounded-lg border p-3 text-xs ${ui.dangerBtn}`}>
+                {planError}
+              </div>
+            )}
+
+            <div className="mt-5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+              {QUOTA_PACKAGES.map((pkg) => (
+                <div
+                  key={pkg.id}
+                  className={`flex flex-col justify-between gap-4 rounded-xl border p-4 ${ui.card}`}
                 >
-                  Registrar candidatura
-                </button>
-              )}
+                  <div>
+                    <div className="text-xl font-bold">{pkg.formattedPrice}</div>
+                    <div className="mt-1 text-sm font-semibold text-blue-500">{pkg.label}</div>
+                    <p className={`mt-2 text-xs ${ui.subText}`}>
+                      Libera imediatamente +{pkg.extraJobs} buscas de vagas no seu limite diário.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={purchasingPkgId !== null}
+                    onClick={() => void handlePurchasePackage(pkg)}
+                    className={`w-full rounded-lg border px-3 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 ${ui.primaryBtn}`}
+                  >
+                    {purchasingPkgId === pkg.id ? 'Processando...' : 'Adquirir pacote'}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -542,3 +1655,5 @@ export function DashboardPage() {
     </div>
   );
 }
+
+export default DashboardPage;

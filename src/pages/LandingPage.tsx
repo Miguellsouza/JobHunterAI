@@ -28,12 +28,14 @@ export function LandingPage() {
                   <LayoutDashboard className="h-4 w-4 text-[#60a5fa]" />
                   <span>Meu Painel</span>
                 </Link>
-                <Link
-                  to="/admin"
-                  className="rounded-lg bg-zinc-100 px-3.5 py-2 text-xs sm:text-sm font-semibold text-zinc-950 transition-colors hover:bg-white"
-                >
-                  Admin
-                </Link>
+                {user.role === 'admin' && (
+                  <Link
+                    to="/admin"
+                    className="rounded-lg bg-zinc-100 px-3.5 py-2 text-xs sm:text-sm font-semibold text-zinc-950 transition-colors hover:bg-white"
+                  >
+                    Admin
+                  </Link>
+                )}
               </>
             ) : (
               <>
@@ -81,12 +83,14 @@ export function LandingPage() {
                 <span>Abrir Painel de Oportunidades</span>
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link
-                to="/admin"
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-6 py-3 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-700 hover:text-white"
-              >
-                <span>Gerenciar no Admin</span>
-              </Link>
+              {user.role === 'admin' && (
+                <Link
+                  to="/admin"
+                  className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-6 py-3 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-700 hover:text-white"
+                >
+                  <span>Gerenciar no Admin</span>
+                </Link>
+              )}
             </>
           ) : (
             <>
