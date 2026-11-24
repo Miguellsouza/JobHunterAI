@@ -5,7 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { DashboardPage } from './pages/DashboardPage';
+import DashboardPage from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
 
 export function App() {
