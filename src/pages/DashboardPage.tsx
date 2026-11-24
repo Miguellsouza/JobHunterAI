@@ -1,13 +1,35 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BrowserRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Turnstile } from '@marsidev/react-turnstile';
 import {
-  ArrowLeftRight, Bell, Bookmark, Briefcase, CheckCircle2, ChevronDown, Crown, ExternalLink, FileText,
-  Filter, Laptop, LogOut, MapPin, Menu, Moon, Search, Send, Settings, Sparkles, Sun, User, X,
+  ArrowLeftRight,
+  Bell,
+  Bookmark,
+  Briefcase,
+  CheckCircle2,
+  ChevronDown,
+  Crown,
+  ExternalLink,
+  FileText,
+  Filter,
+  Laptop,
+  LogOut,
+  MapPin,
+  Menu,
+  Moon,
+  Search,
+  Send,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  User,
+  X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-
+import { useAuth } from '../context/AuthContext';
+import { useJobs } from '../context/JobsContext';
 
 // ============================================================
 // TIPOS
@@ -48,7 +70,6 @@ interface FilterState {
   level: string;
   contract: string;
 }
-
 
 // ============================================================
 // DADOS
@@ -117,7 +138,6 @@ const PLANS: PlanOption[] = [
   { id: 'pro', tier: 'Plano Avançado', name: 'Pro', extra: 100, price: 'R$ 49,90' },
 ];
 
-
 // ============================================================
 // Modal
 // ============================================================
@@ -160,7 +180,6 @@ function Modal({ title, onClose, wide = false, children }: ModalProps) {
   );
 }
 
-
 // ============================================================
 // AdherenceRing
 // ============================================================
@@ -197,31 +216,32 @@ function AdherenceRing({ value }: AdherenceRingProps) {
   );
 }
 
-
 // ============================================================
 // Sidebar
 // ============================================================
 interface SidebarProps {
   open: boolean;
+  isAdmin: boolean;
   onClose: () => void;
   onPlans: () => void;
+  onLogout: () => void;
 }
 
 const NAV = [
-  { to: '/', label: 'Vagas', icon: Briefcase },
-  { to: '/perfil', label: 'Meu perfil', icon: User },
-  { to: '/curriculo', label: 'Currículo', icon: FileText },
-  { to: '/configuracoes', label: 'Configurações', icon: Settings },
+  { to: '/painel', label: 'Vagas', icon: Briefcase, end: true },
+  { to: '/painel/perfil', label: 'Meu perfil', icon: User, end: false },
+  { to: '/painel/curriculo', label: 'Currículo', icon: FileText, end: false },
+  { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, end: false },
 ];
 
-function Sidebar({ open, onClose, onPlans }: SidebarProps) {
+function Sidebar({ open, isAdmin, onClose, onPlans, onLogout }: SidebarProps) {
   return (
     <>
       {open && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={onClose} aria-hidden="true" />}
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-[#191A36] px-4 py-6 transition-transform duration-200 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <div className="mb-8 flex items-center gap-3 px-2">
+        <Link to="/" className="mb-8 flex items-center gap-3 px-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#5D65D8]">
             <Briefcase className="h-5 w-5 text-white" />
           </div>
@@ -229,14 +249,14 @@ function Sidebar({ open, onClose, onPlans }: SidebarProps) {
             <span className="text-white">Job</span>
             <span className="text-[#8B92F2]">Hunter</span>
           </span>
-        </div>
+        </Link>
 
         <nav className="flex flex-col gap-1">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
-              end
+              end={end}
               onClick={onClose}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -250,21 +270,33 @@ function Sidebar({ open, onClose, onPlans }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
           <button
             type="button"
             onClick={onPlans}
-            className="flex w-full items-center gap-3 rounded-xl bg-[#5B61D6] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4E54C8]"
+            className="flex w-full items-center gap-3 rounded-xl bg-[#5B61D6] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4E54C8] cursor-pointer"
           >
             <Crown className="h-5 w-5" />
             Planos
           </button>
+
+          {isAdmin && (
+            <Link
+              to="/admin"
+              onClick={onClose}
+              className="flex w-full items-center gap-3 rounded-xl border border-white/15 px-3 py-2.5 text-sm font-medium text-[#B4B7D4] transition-colors hover:bg-[#23244A] hover:text-white"
+            >
+              <ShieldCheck className="h-5 w-5 text-[#8B92F2]" />
+              Painel Admin
+            </Link>
+          )}
         </div>
 
         <div className="mt-auto border-t border-white/10 pt-4">
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[#B4B7D4] transition-colors hover:bg-[#23244A]"
+            onClick={onLogout}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[#B4B7D4] transition-colors hover:bg-[#23244A] hover:text-white cursor-pointer"
           >
             <LogOut className="h-5 w-5" />
             Sair da conta
@@ -275,19 +307,19 @@ function Sidebar({ open, onClose, onPlans }: SidebarProps) {
   );
 }
 
-
 // ============================================================
 // Header
 // ============================================================
 interface HeaderProps {
   title: string;
   subtitle: string;
+  initials: string;
   dark: boolean;
   onToggleTheme: () => void;
   onMenu: () => void;
 }
 
-function Header({ title, subtitle, dark, onToggleTheme, onMenu }: HeaderProps) {
+function Header({ title, subtitle, initials, dark, onToggleTheme, onMenu }: HeaderProps) {
   return (
     <header className="flex items-start justify-between gap-4">
       <div className="flex items-start gap-3">
@@ -314,7 +346,7 @@ function Header({ title, subtitle, dark, onToggleTheme, onMenu }: HeaderProps) {
             aria-checked={dark}
             aria-label="Alternar tema escuro"
             onClick={onToggleTheme}
-            className="relative h-6 w-11 rounded-full bg-[#25264B]"
+            className="relative h-6 w-11 rounded-full bg-[#25264B] cursor-pointer"
           >
             <span
               className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${dark ? 'translate-x-5' : ''}`}
@@ -333,8 +365,8 @@ function Header({ title, subtitle, dark, onToggleTheme, onMenu }: HeaderProps) {
         </button>
 
         <button type="button" aria-label="Menu do usuário" className="flex items-center gap-1 text-gray-600 dark:text-gray-300">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4349B8] text-sm font-bold text-white">
-            MR
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4349B8] text-sm font-bold text-white uppercase">
+            {initials}
           </span>
           <ChevronDown className="h-4 w-4" />
         </button>
@@ -342,7 +374,6 @@ function Header({ title, subtitle, dark, onToggleTheme, onMenu }: HeaderProps) {
     </header>
   );
 }
-
 
 // ============================================================
 // DailyQuotaCard
@@ -385,7 +416,6 @@ function DailyQuotaCard({ used, limit }: DailyQuotaCardProps) {
     </section>
   );
 }
-
 
 // ============================================================
 // JobFiltersCard
@@ -462,7 +492,7 @@ function JobFiltersCard({ filters, onChange }: JobFiltersCardProps) {
                 type="button"
                 aria-pressed={active}
                 onClick={() => pickModality(label)}
-                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
                   active
                     ? 'border-[#474EC4] bg-[#474EC4] text-white'
                     : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-[#23244A] dark:text-gray-200 dark:hover:bg-[#2B2D5B]'
@@ -486,7 +516,6 @@ function JobFiltersCard({ filters, onChange }: JobFiltersCardProps) {
     </section>
   );
 }
-
 
 // ============================================================
 // JobCard
@@ -523,7 +552,7 @@ function JobCard({ job, onToggleSave, onView }: JobCardProps) {
           onClick={() => onToggleSave(job.id)}
           aria-pressed={job.saved}
           aria-label={job.saved ? 'Remover das vagas salvas' : 'Salvar vaga'}
-          className="rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-white/10"
+          className="rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-white/10 cursor-pointer"
         >
           <Bookmark
             className={`h-6 w-6 ${job.saved ? 'fill-[#474EC4] text-[#474EC4]' : 'text-gray-700 dark:text-gray-300'}`}
@@ -534,7 +563,7 @@ function JobCard({ job, onToggleSave, onView }: JobCardProps) {
       <button
         type="button"
         onClick={() => onView(job.id)}
-        className="inline-flex items-center gap-2 rounded-xl bg-[#474EC4] px-5 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0]"
+        className="inline-flex items-center gap-2 rounded-xl bg-[#474EC4] px-5 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0] cursor-pointer"
       >
         Ver vaga
         <ExternalLink className="h-4 w-4" />
@@ -542,7 +571,6 @@ function JobCard({ job, onToggleSave, onView }: JobCardProps) {
     </article>
   );
 }
-
 
 // ============================================================
 // JobDetailsModal
@@ -595,7 +623,7 @@ function JobDetailsModal({ job, onClose, onApply, onToggleSave }: JobDetailsModa
           <button
             type="button"
             onClick={() => onApply(job.id)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#474EC4] px-5 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0]"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#474EC4] px-5 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0] cursor-pointer"
           >
             <Send className="h-4 w-4" />
             Candidatar-me
@@ -604,7 +632,7 @@ function JobDetailsModal({ job, onClose, onApply, onToggleSave }: JobDetailsModa
         <button
           type="button"
           onClick={() => onToggleSave(job.id)}
-          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/10"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/10 cursor-pointer"
         >
           <Bookmark className={`h-4 w-4 ${job.saved ? 'fill-[#474EC4] text-[#474EC4]' : ''}`} />
           {job.saved ? 'Vaga salva' : 'Salvar vaga'}
@@ -613,7 +641,6 @@ function JobDetailsModal({ job, onClose, onApply, onToggleSave }: JobDetailsModa
     </Modal>
   );
 }
-
 
 // ============================================================
 // PlansModal
@@ -646,7 +673,7 @@ function PlansModal({ onClose, onPurchase }: PlansModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="mt-6 rounded-xl bg-[#474EC4] px-6 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0]"
+            className="mt-6 rounded-xl bg-[#474EC4] px-6 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0] cursor-pointer"
           >
             Voltar às vagas
           </button>
@@ -676,7 +703,7 @@ function PlansModal({ onClose, onPurchase }: PlansModalProps) {
               type="button"
               aria-pressed={active}
               onClick={() => setSelected(plan)}
-              className={`relative flex flex-col items-start rounded-2xl border bg-white p-5 text-left transition-colors dark:bg-[#23244A] ${
+              className={`relative flex flex-col items-start rounded-2xl border bg-white p-5 text-left transition-colors dark:bg-[#23244A] cursor-pointer ${
                 active ? 'border-[#474EC4] ring-2 ring-[#474EC4]' : 'border-gray-200 hover:border-[#474EC4] dark:border-white/10'
               }`}
             >
@@ -700,7 +727,7 @@ function PlansModal({ onClose, onPurchase }: PlansModalProps) {
             Plano <strong>{selected.name}</strong> · +{selected.extra} vagas por {selected.price}
           </p>
           <Turnstile
-            siteKey="1x00000000000000000000AA"
+            siteKey="0x4AAAAAAGPSF-eeNU8ONAjq"
             onSuccess={setToken}
             onExpire={() => setToken(null)}
             onError={() => setToken(null)}
@@ -709,7 +736,7 @@ function PlansModal({ onClose, onPurchase }: PlansModalProps) {
             type="button"
             onClick={confirm}
             disabled={!token}
-            className="rounded-xl bg-[#474EC4] px-6 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0] disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl bg-[#474EC4] px-6 py-2.5 font-medium text-white transition-colors hover:bg-[#3B42B0] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
             Confirmar contratação
           </button>
@@ -719,9 +746,8 @@ function PlansModal({ onClose, onPurchase }: PlansModalProps) {
   );
 }
 
-
 // ============================================================
-// App (estado, rotas e layout)
+// DashboardPage (estado, sub-rotas e layout)
 // ============================================================
 const TABS: { id: TabType; label: string; icon: LucideIcon }[] = [
   { id: 'ia', label: 'Selecionadas pela IA', icon: Sparkles },
@@ -736,25 +762,35 @@ const EMPTY: Record<TabType, string> = {
 };
 
 const PAGES: Record<string, { title: string; subtitle: string }> = {
-  '/': { title: 'Encontre sua próxima oportunidade', subtitle: 'Vagas selecionadas pela IA de acordo com o seu perfil' },
-  '/perfil': { title: 'Meu perfil', subtitle: 'Gerencie suas informações e preferências profissionais' },
-  '/curriculo': { title: 'Currículo', subtitle: 'Mantenha seu currículo atualizado para melhorar a aderência' },
-  '/configuracoes': { title: 'Configurações', subtitle: 'Personalize sua experiência no JobHunter' },
+  '/painel': { title: 'Encontre sua próxima oportunidade', subtitle: 'Vagas selecionadas pela IA de acordo com o seu perfil' },
+  '/painel/perfil': { title: 'Meu perfil', subtitle: 'Gerencie suas informações e preferências profissionais' },
+  '/painel/curriculo': { title: 'Currículo', subtitle: 'Mantenha seu currículo atualizado para melhorar a aderência' },
+  '/painel/configuracoes': { title: 'Configurações', subtitle: 'Personalize sua experiência no JobHunter' },
 };
 
 const INITIAL_FILTERS: FilterState = { modality: 'Remoto', modalityApplied: false, area: '', level: '', contract: '' };
 
 const readTheme = (): boolean => {
   try {
-    return localStorage.getItem('jh-theme') === 'dark';
+    const stored = localStorage.getItem('jh-theme');
+    return stored ? stored === 'dark' : true;
   } catch {
-    return false;
+    return true;
   }
 };
 
-function Shell() {
+export default function DashboardPage() {
   const { pathname } = useLocation();
-  const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS);
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const { hasAlreadyApplied, registerApplication } = useJobs();
+
+  const [jobs, setJobs] = useState<Job[]>(() =>
+    INITIAL_JOBS.map((j) => ({
+      ...j,
+      applied: j.applied || hasAlreadyApplied(j.company),
+    }))
+  );
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [tab, setTab] = useState<TabType>('ia');
   const [quota, setQuota] = useState({ used: 32, limit: 50 });
@@ -772,10 +808,36 @@ function Shell() {
     }
   }, [dark]);
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   const toggleSave = (id: number) =>
     setJobs((js) => js.map((j) => (j.id === id ? { ...j, saved: !j.saved } : j)));
-  const apply = (id: number) =>
+
+  const apply = (id: number) => {
+    const target = jobs.find((j) => j.id === id);
+    if (target) {
+      registerApplication({
+        id: `opp-${target.id}`,
+        title: target.title,
+        company: target.company,
+        location: target.modality,
+        foundDate: new Date().toLocaleDateString('pt-BR'),
+        matchPercentage: target.match,
+        isNew: true,
+        hasExpandableRequirements: false,
+        requirements: [target.area, target.level, target.contract],
+        summary: target.description,
+        modalityDetails: target.place,
+        compensation: target.contract,
+        activities: [],
+      });
+    }
     setJobs((js) => js.map((j) => (j.id === id ? { ...j, applied: true } : j)));
+  };
+
   const purchase = (extra: number) => setQuota((q) => ({ ...q, limit: q.limit + extra }));
 
   const visible = jobs.filter((j) => {
@@ -789,7 +851,16 @@ function Shell() {
   });
 
   const selectedJob = jobs.find((j) => j.id === selectedId) ?? null;
-  const page = PAGES[pathname] ?? PAGES['/'];
+  const normalizedPath = pathname.replace(/\/+$/, '') || '/painel';
+  const page = PAGES[normalizedPath] ?? PAGES['/painel'];
+
+  const initials = (user?.name || user?.email || 'JH')
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 
   const vagas = (
     <>
@@ -799,7 +870,12 @@ function Shell() {
       <nav role="tablist" className="flex gap-8 overflow-x-auto border-b border-gray-200 dark:border-white/10">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = tab === id;
-          const count = id === 'salvas' ? jobs.filter((j) => j.saved).length : id === 'candidaturas' ? jobs.filter((j) => j.applied).length : 0;
+          const count =
+            id === 'salvas'
+              ? jobs.filter((j) => j.saved).length
+              : id === 'candidaturas'
+                ? jobs.filter((j) => j.applied).length
+                : 0;
           return (
             <button
               key={id}
@@ -807,7 +883,7 @@ function Shell() {
               role="tab"
               aria-selected={active}
               onClick={() => setTab(id)}
-              className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 text-sm transition-colors ${
+              className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 text-sm transition-colors cursor-pointer ${
                 active
                   ? 'border-[#474EC4] font-semibold text-[#474EC4] dark:border-[#8B92F2] dark:text-[#8B92F2]'
                   : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
@@ -841,13 +917,29 @@ function Shell() {
 
   return (
     <div className="min-h-screen bg-[#F3F4F8] font-sans text-[#111827] dark:bg-[#0F1020]">
-      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} onPlans={() => { setMenuOpen(false); setPlansOpen(true); }} />
+      <Sidebar
+        open={menuOpen}
+        isAdmin={user?.role === 'admin'}
+        onClose={() => setMenuOpen(false)}
+        onPlans={() => {
+          setMenuOpen(false);
+          setPlansOpen(true);
+        }}
+        onLogout={handleLogout}
+      />
 
       <div className="lg:pl-60">
         <main className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-8">
-          <Header title={page.title} subtitle={page.subtitle} dark={dark} onToggleTheme={() => setDark((d) => !d)} onMenu={() => setMenuOpen(true)} />
+          <Header
+            title={page.title}
+            subtitle={page.subtitle}
+            initials={initials}
+            dark={dark}
+            onToggleTheme={() => setDark((d) => !d)}
+            onMenu={() => setMenuOpen(true)}
+          />
           <Routes>
-            <Route path="/" element={vagas} />
+            <Route index element={vagas} />
             <Route
               path="*"
               element={
@@ -865,13 +957,5 @@ function Shell() {
       )}
       {plansOpen && <PlansModal onClose={() => setPlansOpen(false)} onPurchase={purchase} />}
     </div>
-  );
-}
-
-export default function App() {
-  return (
-    <BrowserRouter>
-      <Shell />
-    </BrowserRouter>
   );
 }

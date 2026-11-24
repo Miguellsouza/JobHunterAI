@@ -21,7 +21,7 @@ export function App() {
 
             {/* Rotas privadas (exigem autenticação) */}
             <Route
-              path="/painel"
+              path="/painel/*"
               element={
                 <ProtectedRoute>
                   <DashboardPage />
